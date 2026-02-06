@@ -3,7 +3,7 @@
 from typing import AsyncGenerator
 from uuid import UUID
 
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, or_, and_, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConversationNotFoundError
@@ -99,21 +99,32 @@ class ChatService:
         Returns:
             tuple: (conversations, next_cursor, has_more, total_count)
         """
-        # Build base query
+        # Build base query with stable sort (updated_at DESC, id DESC)
         query = select(Conversation).where(
             Conversation.user_id == user_id
-        ).order_by(desc(Conversation.updated_at))
+        ).order_by(desc(Conversation.updated_at), desc(Conversation.id))
 
         # Apply cursor pagination if cursor is provided
         if cursor:
-            # Get the cursor conversation's updated_at
             cursor_result = await self.db.execute(
-                select(Conversation.updated_at).where(Conversation.id == cursor)
+                select(Conversation.updated_at, Conversation.id).where(
+                    Conversation.id == cursor
+                )
             )
-            cursor_updated_at = cursor_result.scalar_one_or_none()
+            cursor_row = cursor_result.one_or_none()
 
-            if cursor_updated_at:
-                query = query.where(Conversation.updated_at < cursor_updated_at)
+            if cursor_row:
+                cursor_updated_at, cursor_id = cursor_row
+                # Use composite cursor: items after cursor in (updated_at DESC, id DESC) order
+                query = query.where(
+                    or_(
+                        Conversation.updated_at < cursor_updated_at,
+                        and_(
+                            Conversation.updated_at == cursor_updated_at,
+                            Conversation.id < cursor_id,
+                        ),
+                    )
+                )
 
         # Fetch one more than limit to check if there are more pages
         query = query.limit(limit + 1)

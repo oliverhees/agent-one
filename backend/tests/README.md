@@ -12,6 +12,35 @@ tests/
 └── README.md                # Diese Datei
 ```
 
+## Voraussetzungen
+
+Die Tests verwenden eine **PostgreSQL Test-Datenbank** statt SQLite, da die Models PostgreSQL-spezifische Typen verwenden (`UUID`, `JSONB`, `pgvector`).
+
+### 1. PostgreSQL starten
+
+```bash
+docker compose up -d db
+```
+
+### 2. Test-Datenbank erstellen
+
+**Option A: Automatisches Setup (empfohlen)**
+```bash
+./scripts/setup-test-db.sh
+```
+
+**Option B: Manuell**
+```bash
+docker compose exec db psql -U alice -c "CREATE DATABASE alice_test;"
+docker compose exec db psql -U alice -d alice_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
+
+### 3. Dependencies installieren
+
+```bash
+pip install -r requirements-dev.txt
+```
+
 ## Tests ausführen
 
 ### Alle Tests
@@ -49,60 +78,33 @@ pytest -v
 pytest -s
 ```
 
-## WICHTIGER HINWEIS
+## Test-Datenbank Details
 
-**CRITICAL BUG:** Die Models verwenden PostgreSQL-spezifische Typen (`PG_UUID`, `JSONB`), die **NICHT mit SQLite kompatibel** sind.
+**Connection String:**
+```
+postgresql+asyncpg://alice:alice_dev_123@localhost:5432/alice_test
+```
 
-Die Tests werden aktuell **NICHT** laufen können, weil:
-1. `conftest.py` verwendet SQLite in-memory DB: `sqlite+aiosqlite:///:memory:`
-2. Models verwenden `sqlalchemy.dialects.postgresql.UUID` und `JSONB`
-3. SQLite unterstützt diese Typen nicht
+**Eigenschaften:**
+- Separate Datenbank nur für Tests
+- Tabellen werden einmalig pro Test-Session erstellt
+- Jeder Test läuft in einer eigenen Transaktion (automatisches Rollback)
+- Keine gegenseitige Beeinflussung zwischen Tests
+- pgvector Extension aktiviert für Vector-Embeddings
 
-### Lösung 1: PostgreSQL Testcontainer (EMPFOHLEN)
+## Test-Datenbank zurücksetzen
 
-Verwende `testcontainers` um eine echte PostgreSQL-Instanz für Tests zu starten:
+Falls die Test-DB in einen inkonsistenten Zustand gerät:
 
 ```bash
-pip install testcontainers[postgres]
+./scripts/setup-test-db.sh
 ```
 
-Dann in `conftest.py`:
-```python
-from testcontainers.postgres import PostgresContainer
-
-@pytest.fixture(scope="session")
-def postgres_container():
-    with PostgresContainer("postgres:16-alpine") as postgres:
-        yield postgres
-
-@pytest.fixture
-async def test_db(postgres_container):
-    engine = create_async_engine(postgres_container.get_connection_url())
-    # ... rest of the code
-```
-
-### Lösung 2: Models SQLite-kompatibel machen
-
-In `app/models/base.py` und allen anderen Models:
-```python
-from sqlalchemy import String
-from sqlalchemy.dialects import postgresql
-from uuid import UUID as PyUUID
-
-# Conditional UUID type
-UUID_TYPE = postgresql.UUID(as_uuid=True) if dialect == "postgresql" else String(36)
-```
-
-### Lösung 3: Nur PostgreSQL für Tests verwenden
-
-`.env.test`:
-```env
-DATABASE_URL=postgresql+asyncpg://test:test@localhost:5432/alice_test
-```
-
-Und vor Tests:
+Oder manuell:
 ```bash
-docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=test -e POSTGRES_USER=test -e POSTGRES_DB=alice_test postgres:16-alpine
+docker compose exec db psql -U alice -c "DROP DATABASE IF EXISTS alice_test;"
+docker compose exec db psql -U alice -c "CREATE DATABASE alice_test;"
+docker compose exec db psql -U alice -d alice_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
 ## Test Coverage Ziel

@@ -27,18 +27,9 @@ class MessageCreate(BaseModel):
 class MessageResponse(BaseModel):
     """Schema for message response."""
 
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID = Field(..., description="Message unique identifier")
-    conversation_id: UUID = Field(..., description="Conversation ID this message belongs to")
-    role: str = Field(..., description="Message role: user, assistant, or system")
-    content: str = Field(..., description="Message content text")
-    created_at: datetime = Field(..., description="Message creation timestamp")
-
-    class Config:
-        """Pydantic configuration."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
             "example": {
                 "id": "550e8400-e29b-41d4-a716-446655440000",
                 "conversation_id": "660e8400-e29b-41d4-a716-446655440001",
@@ -46,24 +37,22 @@ class MessageResponse(BaseModel):
                 "content": "Hallo ALICE, wie geht es dir?",
                 "created_at": "2026-02-06T10:30:00Z",
             }
-        }
+        },
+    )
+
+    id: UUID = Field(..., description="Message unique identifier")
+    conversation_id: UUID = Field(..., description="Conversation ID this message belongs to")
+    role: str = Field(..., description="Message role: user, assistant, or system")
+    content: str = Field(..., description="Message content text")
+    created_at: datetime = Field(..., description="Message creation timestamp")
 
 
 class ConversationResponse(BaseModel):
     """Schema for conversation response."""
 
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID = Field(..., description="Conversation unique identifier")
-    user_id: UUID = Field(..., description="User who owns this conversation")
-    title: str | None = Field(None, description="Conversation title")
-    created_at: datetime = Field(..., description="Conversation creation timestamp")
-    updated_at: datetime = Field(..., description="Last activity timestamp")
-
-    class Config:
-        """Pydantic configuration."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
             "example": {
                 "id": "660e8400-e29b-41d4-a716-446655440001",
                 "user_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -71,7 +60,14 @@ class ConversationResponse(BaseModel):
                 "created_at": "2026-02-06T10:30:00Z",
                 "updated_at": "2026-02-06T11:45:00Z",
             }
-        }
+        },
+    )
+
+    id: UUID = Field(..., description="Conversation unique identifier")
+    user_id: UUID = Field(..., description="User who owns this conversation")
+    title: str | None = Field(None, description="Conversation title")
+    created_at: datetime = Field(..., description="Conversation creation timestamp")
+    updated_at: datetime = Field(..., description="Last activity timestamp")
 
 
 class ConversationListResponse(BaseModel):
@@ -102,23 +98,3 @@ class ConversationListResponse(BaseModel):
         description="Number of items per page",
         examples=[20],
     )
-
-    class Config:
-        """Pydantic configuration."""
-
-        json_schema_extra = {
-            "example": {
-                "conversations": [
-                    {
-                        "id": "660e8400-e29b-41d4-a716-446655440001",
-                        "user_id": "550e8400-e29b-41d4-a716-446655440000",
-                        "title": "Chat über ADHS Strategien",
-                        "created_at": "2026-02-06T10:30:00Z",
-                        "updated_at": "2026-02-06T11:45:00Z",
-                    }
-                ],
-                "total": 42,
-                "page": 1,
-                "page_size": 20,
-            }
-        }

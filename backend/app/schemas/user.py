@@ -77,20 +77,9 @@ class UserUpdate(BaseModel):
 class UserResponse(BaseModel):
     """Schema for user response (without password)."""
 
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID = Field(..., description="User unique identifier")
-    email: EmailStr = Field(..., description="User email address")
-    display_name: str = Field(..., description="User display name")
-    avatar_url: str | None = Field(None, description="URL to user avatar image")
-    is_active: bool = Field(..., description="Is user account active?")
-    created_at: datetime = Field(..., description="Account creation timestamp")
-    updated_at: datetime = Field(..., description="Last update timestamp")
-
-    class Config:
-        """Pydantic configuration."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
             "example": {
                 "id": "550e8400-e29b-41d4-a716-446655440000",
                 "email": "user@example.com",
@@ -100,4 +89,13 @@ class UserResponse(BaseModel):
                 "created_at": "2026-02-06T10:30:00Z",
                 "updated_at": "2026-02-06T10:30:00Z",
             }
-        }
+        },
+    )
+
+    id: UUID = Field(..., description="User unique identifier")
+    email: EmailStr = Field(..., description="User email address")
+    display_name: str = Field(..., description="User display name")
+    avatar_url: str | None = Field(None, description="URL to user avatar image")
+    is_active: bool = Field(..., description="Is user account active?")
+    created_at: datetime = Field(..., description="Account creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")

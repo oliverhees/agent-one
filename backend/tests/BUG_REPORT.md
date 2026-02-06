@@ -2,25 +2,25 @@
 
 ## Gefundene Bugs und Probleme
 
-### BUG 1 | Schwere: Critical
+### BUG 1 | Schwere: Critical | STATUS: ✅ BEHOBEN
 **Test:** SQLite Kompatibilität für Tests
 **Erwartet:** Tests sollten mit SQLite in-memory DB laufen können
 **Tatsächlich:** Models verwenden PostgreSQL-spezifische Typen die mit SQLite inkompatibel sind
-**Dateien:**
-- `/backend/app/models/base.py` - Line 22: `UUID(as_uuid=True)` von `sqlalchemy.dialects.postgresql`
-- `/backend/app/models/conversation.py` - Line 23: `PG_UUID(as_uuid=True)`
-- `/backend/app/models/message.py` - Line 32: `PG_UUID(as_uuid=True)` + Line 53: `JSONB`
-- `/backend/app/models/refresh_token.py` - Line 23: `PG_UUID(as_uuid=True)`
 
-**Problem:**
-`sqlalchemy.dialects.postgresql.UUID` und `JSONB` funktionieren NICHT mit SQLite. Tests mit SQLite in-memory DB werden fehlschlagen.
+**Lösung:**
+Die Test-Infrastruktur wurde auf PostgreSQL umgestellt statt SQLite zu verwenden.
 
-**Lösungsvorschläge:**
-1. **Option A (empfohlen für Tests):** Conditional imports - verwende generisches `String` für SQLite, `UUID` für PostgreSQL
-2. **Option B:** Nutze PostgreSQL testcontainer statt SQLite
-3. **Option C:** Verwende `sqlalchemy.types.UUID` statt `postgresql.UUID` (falls verfügbar in neueren Versionen)
+**Änderungen:**
+- `conftest.py`: Verwendet jetzt `alice_test` PostgreSQL-Datenbank
+- `scripts/setup-test-db.sh`: Automatisches Setup-Script für Test-DB
+- `scripts/init-db.sql`: Erstellt `alice_test` Datenbank beim DB-Init
+- `requirements-dev.txt`: `aiosqlite` entfernt
+- `tests/README.md`: Dokumentation aktualisiert
 
-**Impact:** Tests werden aktuell NICHT lauffähig sein ohne PostgreSQL
+**Test-DB:**
+```
+postgresql+asyncpg://alice:alice_dev_123@localhost:5432/alice_test
+```
 
 ---
 

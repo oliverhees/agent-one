@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta
 from typing import Any, Dict
+from uuid import uuid4
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
@@ -56,7 +57,7 @@ def create_access_token(data: Dict[str, Any]) -> str:
     """
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=settings.jwt_access_token_expire_minutes)
-    to_encode.update({"exp": expire, "type": "access"})
+    to_encode.update({"exp": expire, "type": "access", "jti": str(uuid4())})
     encoded_jwt = jwt.encode(
         to_encode,
         settings.jwt_secret_key,
@@ -77,7 +78,7 @@ def create_refresh_token(data: Dict[str, Any]) -> str:
     """
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=settings.jwt_refresh_token_expire_days)
-    to_encode.update({"exp": expire, "type": "refresh"})
+    to_encode.update({"exp": expire, "type": "refresh", "jti": str(uuid4())})
     encoded_jwt = jwt.encode(
         to_encode,
         settings.jwt_secret_key,

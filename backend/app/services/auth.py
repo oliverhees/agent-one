@@ -183,8 +183,10 @@ class AuthService:
         if not db_token:
             raise InvalidTokenError(detail="Refresh token not found or already used")
 
-        # Check if token is expired
-        if db_token.expires_at < datetime.utcnow():
+        # Check if token is expired (handle both timezone-aware and naive datetimes)
+        now = datetime.utcnow()
+        expires_at = db_token.expires_at.replace(tzinfo=None) if db_token.expires_at.tzinfo else db_token.expires_at
+        if expires_at < now:
             raise InvalidTokenError(detail="Refresh token has expired")
 
         # Verify user exists and is active

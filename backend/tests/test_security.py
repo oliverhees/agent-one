@@ -87,7 +87,7 @@ class TestJWTTokens:
         assert "exp" in payload
 
         # Check expiration time (should be ~15 minutes)
-        exp_time = datetime.fromtimestamp(payload["exp"])
+        exp_time = datetime.utcfromtimestamp(payload["exp"])
         now = datetime.utcnow()
         time_diff = (exp_time - now).total_seconds()
 
@@ -116,7 +116,7 @@ class TestJWTTokens:
         assert "exp" in payload
 
         # Check expiration time (should be ~7 days)
-        exp_time = datetime.fromtimestamp(payload["exp"])
+        exp_time = datetime.utcfromtimestamp(payload["exp"])
         now = datetime.utcnow()
         time_diff = (exp_time - now).total_seconds()
 
