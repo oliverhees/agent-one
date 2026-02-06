@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: alice-api
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=db
+      - REDIS_HOST=redis
+    restart: unless-stopped
+    networks:
+      - alice-network
+
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: alice-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-alice}
+      POSTGRES_USER: ${POSTGRES_USER:-alice}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alice_dev_123}
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-alice} -d ${POSTGRES_DB:-alice}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - alice-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: alice-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - alice-network
+
+volumes:
+  postgres_data:
+    name: alice-postgres-data
+  redis_data:
+    name: alice-redis-data
+
+networks:
+  alice-network:
+    name: alice-network
+    driver: bridge
