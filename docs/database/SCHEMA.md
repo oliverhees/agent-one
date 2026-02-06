@@ -1,7 +1,7 @@
 # Datenbankschema
 
 **Letzte Aenderung:** 2026-02-06
-**Letzte Migration:** 001_initial_schema
+**Letzte Migration:** 002_phase2_tables
 **Datenbank:** PostgreSQL 16 + pgvector Extension
 **ORM:** SQLAlchemy 2.0 (async)
 **Migrationen:** Alembic

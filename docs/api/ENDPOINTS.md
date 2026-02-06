@@ -1,6 +1,6 @@
 # API Endpoints
 
-**Version:** 1.0
+**Version:** 2.0
 **Datum:** 2026-02-06
 **Base URL:** `https://api.alice-app.de/api/v1`
 **Dokumentation:** Auto-generiert via FastAPI (Swagger UI unter `/docs`, ReDoc unter `/redoc`)
@@ -13,9 +13,14 @@
 2. [Health Check](#health-check)
 3. [Auth Endpoints](#auth-endpoints)
 4. [Chat Endpoints](#chat-endpoints)
-5. [Fehlercodes](#fehlercodes)
+5. [Task Endpoints](#task-endpoints)
+6. [Brain Endpoints](#brain-endpoints)
+7. [Personality Endpoints](#personality-endpoints)
+8. [Proactive Endpoints](#proactive-endpoints)
+9. [Fehlercodes](#fehlercodes)
+10. [Zusammenfassung](#zusammenfassung)
 
-> **Hinweis:** Dieses Dokument spezifiziert die Endpoints fuer **Phase 1 (Foundation)**. Spaetere Phasen werden ergaenzt, wenn die Implementierung ansteht.
+> **Hinweis:** Dieses Dokument spezifiziert die Endpoints fuer **Phase 1 (Foundation)** und **Phase 2 (Core Features)**. Spaetere Phasen werden ergaenzt, wenn die Implementierung ansteht.
 
 ---
 
@@ -723,6 +728,1413 @@ WebSocket-Verbindung fuer Echtzeit-Chat-Kommunikation. Alternative zum SSE-basie
 
 ---
 
+## Task Endpoints
+
+Alle Task-Endpoints sind unter `/api/v1/tasks/` gruppiert. Alle erfordern Authentifizierung.
+
+### `POST /api/v1/tasks`
+
+Erstellt einen neuen Task fuer den authentifizierten Benutzer.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Request Body:**
+```json
+{
+  "title": "Arzttermin vereinbaren",
+  "description": "Hausarzt anrufen wegen Blutbild-Kontrolle",
+  "priority": "high",
+  "due_date": "2026-02-10T14:00:00Z",
+  "tags": ["gesundheit", "telefonat"],
+  "parent_id": null,
+  "estimated_minutes": 15
+}
+```
+
+**Request Schema:**
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|---|---|---|---|---|
+| `title` | `str` | Ja | Min 1, Max 500 Zeichen | Task-Titel |
+| `description` | `str` | Nein | Max 5000 Zeichen | Ausfuehrliche Beschreibung |
+| `priority` | `str` | Nein | `low`, `medium`, `high`, `urgent` | Prioritaet (Default: `medium`) |
+| `due_date` | `datetime` | Nein | Gueltiges ISO 8601 Datum | Faelligkeitsdatum |
+| `tags` | `str[]` | Nein | Max 20 Tags, je Max 50 Zeichen | Tags fuer Kategorisierung |
+| `parent_id` | `UUID` | Nein | Muss existieren, dem User gehoeren, darf nicht zirkulaer sein | Eltern-Task (fuer Sub-Tasks) |
+| `estimated_minutes` | `int` | Nein | Min 1, Max 1440 | Geschaetzte Dauer in Minuten |
+
+**Response 201 Created:**
+```json
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "Arzttermin vereinbaren",
+  "description": "Hausarzt anrufen wegen Blutbild-Kontrolle",
+  "priority": "high",
+  "status": "open",
+  "due_date": "2026-02-10T14:00:00Z",
+  "completed_at": null,
+  "xp_earned": 0,
+  "parent_id": null,
+  "is_recurring": false,
+  "recurrence_rule": null,
+  "tags": ["gesundheit", "telefonat"],
+  "source": "manual",
+  "source_message_id": null,
+  "estimated_minutes": 15,
+  "sub_tasks": [],
+  "created_at": "2026-02-06T10:00:00Z",
+  "updated_at": "2026-02-06T10:00:00Z"
+}
+```
+
+**Response Schema (TaskResponse):**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `id` | `UUID` | Eindeutige Task-ID |
+| `user_id` | `UUID` | Zugehoeriger Benutzer |
+| `title` | `str` | Task-Titel |
+| `description` | `str | null` | Ausfuehrliche Beschreibung |
+| `priority` | `str` | `low`, `medium`, `high`, `urgent` |
+| `status` | `str` | `open`, `in_progress`, `done`, `cancelled` |
+| `due_date` | `datetime | null` | Faelligkeitsdatum |
+| `completed_at` | `datetime | null` | Erledigungszeitpunkt |
+| `xp_earned` | `int` | Verdiente XP bei Erledigung |
+| `parent_id` | `UUID | null` | Eltern-Task-ID |
+| `is_recurring` | `bool` | Wiederkehrender Task? |
+| `recurrence_rule` | `str | null` | iCal RRULE |
+| `tags` | `str[]` | Tags |
+| `source` | `str` | `manual`, `chat_extract`, `breakdown`, `recurring` |
+| `source_message_id` | `UUID | null` | Quell-Nachrichten-ID |
+| `estimated_minutes` | `int | null` | Geschaetzte Dauer in Minuten |
+| `sub_tasks` | `TaskResponse[]` | Sub-Tasks (nur bei Einzel-Abruf) |
+| `created_at` | `datetime` | Erstellungszeitpunkt |
+| `updated_at` | `datetime` | Letzter Update-Zeitpunkt |
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 404 | `TASK_NOT_FOUND` | parent_id existiert nicht oder gehoert nicht dem User |
+| 422 | `VALIDATION_ERROR` | Validierungsfehler (Titel leer, ungueltige Prioritaet, etc.) |
+| 429 | `RATE_LIMIT_EXCEEDED` | Zu viele Anfragen |
+
+---
+
+### `GET /api/v1/tasks`
+
+Gibt eine paginierte, gefilterte Liste aller Tasks des Nutzers zurueck.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Query Parameter:**
+
+| Parameter | Typ | Default | Beschreibung |
+|---|---|---|---|
+| `cursor` | UUID | null | Cursor fuer Pagination |
+| `limit` | int | 20 | Items pro Seite (max 100) |
+| `status` | str | null | Filter nach Status: `open`, `in_progress`, `done`, `cancelled` |
+| `priority` | str | null | Filter nach Prioritaet: `low`, `medium`, `high`, `urgent` |
+| `tags` | str | null | Filter nach Tags (komma-getrennt, z.B. `gesundheit,arbeit`) |
+| `has_due_date` | bool | null | Filter: nur Tasks mit/ohne Faelligkeitsdatum |
+| `parent_id` | UUID | null | Filter: nur Sub-Tasks eines bestimmten Parent-Tasks (null = nur Top-Level) |
+
+**Response 200 OK:**
+```json
+{
+  "items": [
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "user_id": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "Arzttermin vereinbaren",
+      "description": "Hausarzt anrufen wegen Blutbild-Kontrolle",
+      "priority": "high",
+      "status": "open",
+      "due_date": "2026-02-10T14:00:00Z",
+      "completed_at": null,
+      "xp_earned": 0,
+      "parent_id": null,
+      "is_recurring": false,
+      "recurrence_rule": null,
+      "tags": ["gesundheit", "telefonat"],
+      "source": "manual",
+      "source_message_id": null,
+      "estimated_minutes": 15,
+      "sub_tasks": [],
+      "created_at": "2026-02-06T10:00:00Z",
+      "updated_at": "2026-02-06T10:00:00Z"
+    }
+  ],
+  "next_cursor": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+  "has_more": true,
+  "total_count": 15
+}
+```
+
+**Response Schema:** `PaginatedResponse<TaskResponse>` (siehe TaskResponse oben)
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 422 | `VALIDATION_ERROR` | Ungueltiger Filter-Wert |
+
+---
+
+### `GET /api/v1/tasks/today`
+
+Gibt alle Tasks des Nutzers zurueck, die heute faellig sind oder den Status `open`/`in_progress` haben und kein Faelligkeitsdatum nach heute besitzen. Sortiert nach Prioritaet (urgent > high > medium > low), dann nach Faelligkeitsdatum.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Response 200 OK:**
+```json
+{
+  "items": [
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "user_id": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "Arzttermin",
+      "description": null,
+      "priority": "high",
+      "status": "open",
+      "due_date": "2026-02-06T14:00:00Z",
+      "completed_at": null,
+      "xp_earned": 0,
+      "parent_id": null,
+      "is_recurring": false,
+      "recurrence_rule": null,
+      "tags": ["gesundheit"],
+      "source": "manual",
+      "source_message_id": null,
+      "estimated_minutes": 60,
+      "sub_tasks": [],
+      "created_at": "2026-02-05T20:00:00Z",
+      "updated_at": "2026-02-05T20:00:00Z"
+    }
+  ],
+  "total_count": 3,
+  "total_estimated_minutes": 105
+}
+```
+
+**Response Schema:**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `items` | `TaskResponse[]` | Heutige Tasks, sortiert nach Prioritaet |
+| `total_count` | `int` | Gesamtanzahl heutiger Tasks |
+| `total_estimated_minutes` | `int` | Summe der geschaetzten Minuten |
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+
+---
+
+### `GET /api/v1/tasks/{id}`
+
+Gibt einen einzelnen Task inkl. seiner Sub-Tasks zurueck.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Path Parameter:**
+
+| Parameter | Typ | Beschreibung |
+|---|---|---|
+| `id` | UUID | Task-ID |
+
+**Response 200 OK:**
+```json
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "Umzug vorbereiten",
+  "description": "Alles fuer den Umzug am 15.03. organisieren",
+  "priority": "high",
+  "status": "in_progress",
+  "due_date": "2026-03-15T08:00:00Z",
+  "completed_at": null,
+  "xp_earned": 0,
+  "parent_id": null,
+  "is_recurring": false,
+  "recurrence_rule": null,
+  "tags": ["umzug", "organisation"],
+  "source": "manual",
+  "source_message_id": null,
+  "estimated_minutes": 480,
+  "sub_tasks": [
+    {
+      "id": "sub-task-uuid-001",
+      "user_id": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "Kartons besorgen",
+      "description": null,
+      "priority": "medium",
+      "status": "done",
+      "due_date": "2026-03-01T18:00:00Z",
+      "completed_at": "2026-02-28T16:30:00Z",
+      "xp_earned": 25,
+      "parent_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "is_recurring": false,
+      "recurrence_rule": null,
+      "tags": ["umzug"],
+      "source": "breakdown",
+      "source_message_id": null,
+      "estimated_minutes": 30,
+      "sub_tasks": [],
+      "created_at": "2026-02-06T10:00:00Z",
+      "updated_at": "2026-02-28T16:30:00Z"
+    }
+  ],
+  "created_at": "2026-02-06T10:00:00Z",
+  "updated_at": "2026-02-06T10:00:00Z"
+}
+```
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 404 | `TASK_NOT_FOUND` | Task existiert nicht oder gehoert nicht dem User |
+
+---
+
+### `PUT /api/v1/tasks/{id}`
+
+Aktualisiert einen bestehenden Task. Nur uebergebene Felder werden geaendert (Partial Update).
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Path Parameter:**
+
+| Parameter | Typ | Beschreibung |
+|---|---|---|
+| `id` | UUID | Task-ID |
+
+**Request Body:**
+```json
+{
+  "title": "Arzttermin vereinbaren (Dr. Mueller)",
+  "priority": "urgent",
+  "status": "in_progress",
+  "due_date": "2026-02-08T10:00:00Z",
+  "tags": ["gesundheit", "telefonat", "dringend"],
+  "estimated_minutes": 10
+}
+```
+
+**Request Schema:**
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|---|---|---|---|---|
+| `title` | `str` | Nein | Min 1, Max 500 Zeichen | Neuer Task-Titel |
+| `description` | `str | null` | Nein | Max 5000 Zeichen | Neue Beschreibung (null = loeschen) |
+| `priority` | `str` | Nein | `low`, `medium`, `high`, `urgent` | Neue Prioritaet |
+| `status` | `str` | Nein | `open`, `in_progress`, `done`, `cancelled` | Neuer Status |
+| `due_date` | `datetime | null` | Nein | Gueltiges ISO 8601 Datum | Neues Faelligkeitsdatum (null = loeschen) |
+| `tags` | `str[]` | Nein | Max 20 Tags, je Max 50 Zeichen | Neue Tags (ersetzt komplett) |
+| `estimated_minutes` | `int | null` | Nein | Min 1, Max 1440 | Neue geschaetzte Dauer (null = loeschen) |
+
+**Response 200 OK:** `TaskResponse` (aktualisierter Task)
+
+**Hinweis:** Status-Aenderung zu `done` ueber diesen Endpoint vergibt **keine XP**. Fuer XP-Vergabe `POST /api/v1/tasks/{id}/complete` verwenden.
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 404 | `TASK_NOT_FOUND` | Task existiert nicht oder gehoert nicht dem User |
+| 422 | `VALIDATION_ERROR` | Validierungsfehler |
+
+---
+
+### `DELETE /api/v1/tasks/{id}`
+
+Loescht einen Task und alle zugehoerigen Sub-Tasks (CASCADE).
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Path Parameter:**
+
+| Parameter | Typ | Beschreibung |
+|---|---|---|
+| `id` | UUID | Task-ID |
+
+**Response 204 No Content:**
+Kein Response Body.
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 404 | `TASK_NOT_FOUND` | Task existiert nicht oder gehoert nicht dem User |
+
+---
+
+### `POST /api/v1/tasks/{id}/complete`
+
+Markiert einen Task als erledigt und berechnet XP. Aktualisiert user_stats (XP, Level, Streak). Gibt die XP-Berechnung im Response zurueck.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Path Parameter:**
+
+| Parameter | Typ | Beschreibung |
+|---|---|---|
+| `id` | UUID | Task-ID |
+
+**Request Body:** Kein Request Body erforderlich.
+
+**Response 200 OK:**
+```json
+{
+  "task": {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "title": "Arzttermin vereinbaren",
+    "description": "Hausarzt anrufen wegen Blutbild-Kontrolle",
+    "priority": "high",
+    "status": "done",
+    "due_date": "2026-02-10T14:00:00Z",
+    "completed_at": "2026-02-06T11:30:00Z",
+    "xp_earned": 75,
+    "parent_id": null,
+    "is_recurring": false,
+    "recurrence_rule": null,
+    "tags": ["gesundheit", "telefonat"],
+    "source": "manual",
+    "source_message_id": null,
+    "estimated_minutes": 15,
+    "sub_tasks": [],
+    "created_at": "2026-02-06T10:00:00Z",
+    "updated_at": "2026-02-06T11:30:00Z"
+  },
+  "xp_earned": 75,
+  "xp_breakdown": {
+    "base": 50,
+    "on_time_bonus": 25,
+    "streak_bonus": 0
+  },
+  "total_xp": 325,
+  "level": 1,
+  "level_up": false
+}
+```
+
+**Response Schema:**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `task` | `TaskResponse` | Aktualisierter Task (status=done) |
+| `xp_earned` | `int` | Verdiente XP fuer diesen Task |
+| `xp_breakdown` | `object` | Aufschluesselung der XP |
+| `xp_breakdown.base` | `int` | Basis-XP nach Prioritaet (low=10, medium=25, high=50, urgent=100) |
+| `xp_breakdown.on_time_bonus` | `int` | Bonus fuer rechtzeitige Erledigung (base * 0.5) |
+| `xp_breakdown.streak_bonus` | `int` | Streak-Bonus (base * 0.25 wenn Streak > 0) |
+| `total_xp` | `int` | Neue Gesamt-XP des Nutzers |
+| `level` | `int` | Aktuelles Level des Nutzers |
+| `level_up` | `bool` | Hat der Nutzer ein Level-Up erreicht? |
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 404 | `TASK_NOT_FOUND` | Task existiert nicht oder gehoert nicht dem User |
+| 409 | `TASK_ALREADY_COMPLETED` | Task ist bereits erledigt |
+
+---
+
+## Brain Endpoints
+
+Alle Brain-Endpoints sind unter `/api/v1/brain/` gruppiert. Alle erfordern Authentifizierung. Das Brain (Second Brain) speichert Wissenseintraege mit semantischer Suchfunktion ueber pgvector.
+
+### `POST /api/v1/brain/entries`
+
+Erstellt einen neuen Brain-Eintrag. Embedding-Generierung erfolgt asynchron im Hintergrund.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Request Body:**
+```json
+{
+  "title": "Wie funktioniert Spaced Repetition",
+  "content": "Spaced Repetition ist eine Lernmethode, bei der Informationen in zunehmenden Zeitabstaenden wiederholt werden. Die Methode basiert auf der Vergessenskurve von Ebbinghaus...",
+  "entry_type": "manual",
+  "tags": ["lernen", "produktivitaet", "methoden"],
+  "source_url": null
+}
+```
+
+**Request Schema:**
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|---|---|---|---|---|
+| `title` | `str` | Ja | Min 1, Max 500 Zeichen | Titel des Eintrags |
+| `content` | `str` | Ja | Min 1, Max 50000 Zeichen | Inhalt (Volltext, Markdown unterstuetzt) |
+| `entry_type` | `str` | Nein | `manual`, `chat_extract`, `url_import`, `file_import`, `voice_note` | Typ des Eintrags (Default: `manual`) |
+| `tags` | `str[]` | Nein | Max 30 Tags, je Max 50 Zeichen | Tags fuer Kategorisierung |
+| `source_url` | `str` | Nein | Gueltige URL, Max 2000 Zeichen | Quell-URL (bei Import) |
+
+**Response 201 Created:**
+```json
+{
+  "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "Wie funktioniert Spaced Repetition",
+  "content": "Spaced Repetition ist eine Lernmethode, bei der Informationen in zunehmenden Zeitabstaenden wiederholt werden...",
+  "entry_type": "manual",
+  "tags": ["lernen", "produktivitaet", "methoden"],
+  "source_url": null,
+  "metadata": {
+    "word_count": 42,
+    "language": "de"
+  },
+  "embedding_status": "pending",
+  "created_at": "2026-02-06T10:00:00Z",
+  "updated_at": "2026-02-06T10:00:00Z"
+}
+```
+
+**Response Schema (BrainEntryResponse):**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `id` | `UUID` | Eindeutige Eintrags-ID |
+| `user_id` | `UUID` | Zugehoeriger Benutzer |
+| `title` | `str` | Titel des Eintrags |
+| `content` | `str` | Inhalt (Volltext) |
+| `entry_type` | `str` | `manual`, `chat_extract`, `url_import`, `file_import`, `voice_note` |
+| `tags` | `str[]` | Tags |
+| `source_url` | `str | null` | Quell-URL |
+| `metadata` | `dict` | Zusaetzliche Metadaten (word_count, language, etc.) |
+| `embedding_status` | `str` | `pending`, `processing`, `completed`, `failed` |
+| `created_at` | `datetime` | Erstellungszeitpunkt |
+| `updated_at` | `datetime` | Letzter Update-Zeitpunkt |
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 422 | `VALIDATION_ERROR` | Validierungsfehler (Titel leer, Content zu lang, etc.) |
+| 429 | `RATE_LIMIT_EXCEEDED` | Zu viele Anfragen |
+
+---
+
+### `GET /api/v1/brain/entries`
+
+Gibt eine paginierte, gefilterte Liste aller Brain-Eintraege des Nutzers zurueck.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Query Parameter:**
+
+| Parameter | Typ | Default | Beschreibung |
+|---|---|---|---|
+| `cursor` | UUID | null | Cursor fuer Pagination |
+| `limit` | int | 20 | Items pro Seite (max 100) |
+| `entry_type` | str | null | Filter nach Typ: `manual`, `chat_extract`, `url_import`, `file_import`, `voice_note` |
+| `tags` | str | null | Filter nach Tags (komma-getrennt, z.B. `lernen,methoden`) |
+
+**Response 200 OK:**
+```json
+{
+  "items": [
+    {
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "user_id": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "Wie funktioniert Spaced Repetition",
+      "content": "Spaced Repetition ist eine Lernmethode...",
+      "entry_type": "manual",
+      "tags": ["lernen", "produktivitaet", "methoden"],
+      "source_url": null,
+      "metadata": {
+        "word_count": 42,
+        "language": "de"
+      },
+      "embedding_status": "completed",
+      "created_at": "2026-02-06T10:00:00Z",
+      "updated_at": "2026-02-06T10:00:00Z"
+    }
+  ],
+  "next_cursor": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+  "has_more": false,
+  "total_count": 8
+}
+```
+
+**Response Schema:** `PaginatedResponse<BrainEntryResponse>`
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 422 | `VALIDATION_ERROR` | Ungueltiger Filter-Wert |
+
+---
+
+### `GET /api/v1/brain/entries/{id}`
+
+Gibt einen einzelnen Brain-Eintrag zurueck.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Path Parameter:**
+
+| Parameter | Typ | Beschreibung |
+|---|---|---|
+| `id` | UUID | Brain-Eintrags-ID |
+
+**Response 200 OK:** `BrainEntryResponse` (siehe oben)
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 404 | `BRAIN_ENTRY_NOT_FOUND` | Eintrag existiert nicht oder gehoert nicht dem User |
+
+---
+
+### `PUT /api/v1/brain/entries/{id}`
+
+Aktualisiert einen bestehenden Brain-Eintrag. Bei Aenderung des `content`-Feldes werden Embeddings neu generiert.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Path Parameter:**
+
+| Parameter | Typ | Beschreibung |
+|---|---|---|
+| `id` | UUID | Brain-Eintrags-ID |
+
+**Request Body:**
+```json
+{
+  "title": "Spaced Repetition -- Komplett-Guide",
+  "content": "Aktualisierter Inhalt mit mehr Details...",
+  "tags": ["lernen", "produktivitaet", "methoden", "spaced-repetition"]
+}
+```
+
+**Request Schema:**
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|---|---|---|---|---|
+| `title` | `str` | Nein | Min 1, Max 500 Zeichen | Neuer Titel |
+| `content` | `str` | Nein | Min 1, Max 50000 Zeichen | Neuer Inhalt (triggert Re-Embedding) |
+| `tags` | `str[]` | Nein | Max 30 Tags, je Max 50 Zeichen | Neue Tags (ersetzt komplett) |
+| `source_url` | `str | null` | Nein | Gueltige URL, Max 2000 Zeichen | Neue Quell-URL (null = loeschen) |
+
+**Response 200 OK:** `BrainEntryResponse` (aktualisierter Eintrag, `embedding_status` = `pending` bei Content-Aenderung)
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 404 | `BRAIN_ENTRY_NOT_FOUND` | Eintrag existiert nicht oder gehoert nicht dem User |
+| 422 | `VALIDATION_ERROR` | Validierungsfehler |
+
+---
+
+### `DELETE /api/v1/brain/entries/{id}`
+
+Loescht einen Brain-Eintrag und alle zugehoerigen Embeddings (CASCADE).
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Path Parameter:**
+
+| Parameter | Typ | Beschreibung |
+|---|---|---|
+| `id` | UUID | Brain-Eintrags-ID |
+
+**Response 204 No Content:**
+Kein Response Body.
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 404 | `BRAIN_ENTRY_NOT_FOUND` | Eintrag existiert nicht oder gehoert nicht dem User |
+
+---
+
+### `GET /api/v1/brain/search`
+
+Fuehrt eine semantische Suche ueber alle Brain-Eintraege des Nutzers durch. Verwendet pgvector Cosine Similarity auf den Embeddings.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Query Parameter:**
+
+| Parameter | Typ | Default | Beschreibung |
+|---|---|---|---|
+| `q` | str | -- (Pflicht) | Suchtext (wird in Embedding umgewandelt) |
+| `limit` | int | 10 | Max. Anzahl Ergebnisse (max 50) |
+| `min_score` | float | 0.3 | Minimaler Similarity-Score (0.0 - 1.0) |
+
+**Response 200 OK:**
+```json
+{
+  "results": [
+    {
+      "entry": {
+        "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+        "user_id": "550e8400-e29b-41d4-a716-446655440000",
+        "title": "Wie funktioniert Spaced Repetition",
+        "content": "Spaced Repetition ist eine Lernmethode...",
+        "entry_type": "manual",
+        "tags": ["lernen", "produktivitaet", "methoden"],
+        "source_url": null,
+        "metadata": {
+          "word_count": 42,
+          "language": "de"
+        },
+        "embedding_status": "completed",
+        "created_at": "2026-02-06T10:00:00Z",
+        "updated_at": "2026-02-06T10:00:00Z"
+      },
+      "score": 0.87,
+      "matched_chunks": [
+        "Spaced Repetition ist eine Lernmethode, bei der Informationen in zunehmenden Zeitabstaenden wiederholt werden.",
+        "Die Methode basiert auf der Vergessenskurve von Ebbinghaus und optimiert den Zeitpunkt der Wiederholung."
+      ]
+    }
+  ],
+  "query": "Lernmethoden fuer besseres Gedaechtnis",
+  "total_results": 1
+}
+```
+
+**Response Schema:**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `results` | `SearchResult[]` | Suchergebnisse, sortiert nach Score (absteigend) |
+| `query` | `str` | Originaler Suchtext |
+| `total_results` | `int` | Anzahl gefundener Ergebnisse |
+
+**SearchResult Schema:**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `entry` | `BrainEntryResponse` | Der gefundene Brain-Eintrag |
+| `score` | `float` | Cosine Similarity Score (0.0 - 1.0, hoeher = besser) |
+| `matched_chunks` | `str[]` | Text-Chunks, die den Treffer ausgeloest haben |
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 422 | `VALIDATION_ERROR` | Suchtext leer oder zu lang |
+| 503 | `SEARCH_UNAVAILABLE` | Embedding-Service nicht verfuegbar |
+
+---
+
+## Personality Endpoints
+
+Alle Personality-Endpoints sind unter `/api/v1/personality/` gruppiert. Alle erfordern Authentifizierung. Der Personality-Bereich ermoeglicht die Anpassung von ALICEs Persoenlichkeit ueber Profile, Traits und Rules.
+
+### `POST /api/v1/personality/profiles`
+
+Erstellt ein neues Persoenlichkeitsprofil. Optional basierend auf einem Template.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Request Body:**
+```json
+{
+  "name": "Mein Coach",
+  "template_id": "tmpl-uuid-001",
+  "traits": {
+    "formality": 30,
+    "humor": 60,
+    "strictness": 50,
+    "empathy": 80,
+    "verbosity": 40
+  },
+  "rules": [
+    {"text": "Sprich mich mit Du an", "enabled": true},
+    {"text": "Verwende keine Emojis", "enabled": true}
+  ],
+  "custom_instructions": "Motiviere mich besonders morgens beim Aufstehen."
+}
+```
+
+**Request Schema:**
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|---|---|---|---|---|
+| `name` | `str` | Ja | Min 1, Max 100 Zeichen | Profilname |
+| `template_id` | `UUID` | Nein | Muss existierendes Template sein | Basierendes Template (Traits/Rules werden uebernommen und koennen ueberschrieben werden) |
+| `traits` | `object` | Nein | Werte 0-100, Keys: `formality`, `humor`, `strictness`, `empathy`, `verbosity` | Persoenlichkeits-Traits als Slider-Werte |
+| `rules` | `object[]` | Nein | Max 20 Rules, je Max 500 Zeichen | Custom Rules |
+| `rules[].text` | `str` | Ja | Min 1, Max 500 Zeichen | Rule-Text |
+| `rules[].enabled` | `bool` | Nein | -- | Rule aktiv? (Default: true) |
+| `custom_instructions` | `str` | Nein | Max 2000 Zeichen | Freitext: Zusaetzliche Anweisungen |
+
+**Response 201 Created:**
+```json
+{
+  "id": "prof-uuid-001",
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Mein Coach",
+  "is_active": false,
+  "template_id": "tmpl-uuid-001",
+  "template_name": "Strenger Coach",
+  "traits": {
+    "formality": 30,
+    "humor": 60,
+    "strictness": 50,
+    "empathy": 80,
+    "verbosity": 40
+  },
+  "rules": [
+    {"id": "rule-uuid-001", "text": "Sprich mich mit Du an", "enabled": true},
+    {"id": "rule-uuid-002", "text": "Verwende keine Emojis", "enabled": true}
+  ],
+  "voice_style": {},
+  "custom_instructions": "Motiviere mich besonders morgens beim Aufstehen.",
+  "created_at": "2026-02-06T10:00:00Z",
+  "updated_at": "2026-02-06T10:00:00Z"
+}
+```
+
+**Response Schema (PersonalityProfileResponse):**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `id` | `UUID` | Eindeutige Profil-ID |
+| `user_id` | `UUID` | Zugehoeriger Benutzer |
+| `name` | `str` | Profilname |
+| `is_active` | `bool` | Ist dieses Profil aktiv? |
+| `template_id` | `UUID | null` | Basierendes Template |
+| `template_name` | `str | null` | Name des Templates (fuer Anzeige) |
+| `traits` | `object` | Persoenlichkeits-Traits (Slider-Werte 0-100) |
+| `rules` | `object[]` | Custom Rules mit generierter ID |
+| `voice_style` | `object` | Voice-Konfiguration (TTS-Parameter) |
+| `custom_instructions` | `str | null` | Freitext-Anweisungen |
+| `created_at` | `datetime` | Erstellungszeitpunkt |
+| `updated_at` | `datetime` | Letzter Update-Zeitpunkt |
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 404 | `PERSONALITY_TEMPLATE_NOT_FOUND` | template_id existiert nicht |
+| 422 | `VALIDATION_ERROR` | Validierungsfehler (Name leer, ungueltige Trait-Werte, etc.) |
+
+---
+
+### `GET /api/v1/personality/profiles`
+
+Gibt alle Persoenlichkeitsprofile des Nutzers zurueck.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Response 200 OK:**
+```json
+{
+  "items": [
+    {
+      "id": "prof-uuid-001",
+      "user_id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Mein Coach",
+      "is_active": true,
+      "template_id": "tmpl-uuid-001",
+      "template_name": "Strenger Coach",
+      "traits": {
+        "formality": 30,
+        "humor": 60,
+        "strictness": 50,
+        "empathy": 80,
+        "verbosity": 40
+      },
+      "rules": [
+        {"id": "rule-uuid-001", "text": "Sprich mich mit Du an", "enabled": true}
+      ],
+      "voice_style": {},
+      "custom_instructions": "Motiviere mich besonders morgens beim Aufstehen.",
+      "created_at": "2026-02-06T10:00:00Z",
+      "updated_at": "2026-02-06T10:00:00Z"
+    }
+  ],
+  "total_count": 1
+}
+```
+
+**Response Schema:**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `items` | `PersonalityProfileResponse[]` | Liste der Profile |
+| `total_count` | `int` | Gesamtanzahl Profile |
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+
+---
+
+### `PUT /api/v1/personality/profiles/{id}`
+
+Aktualisiert ein bestehendes Persoenlichkeitsprofil. Nur uebergebene Felder werden geaendert.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Path Parameter:**
+
+| Parameter | Typ | Beschreibung |
+|---|---|---|
+| `id` | UUID | Profil-ID |
+
+**Request Body:**
+```json
+{
+  "name": "Mein Entspannter Coach",
+  "traits": {
+    "formality": 20,
+    "humor": 70,
+    "strictness": 30,
+    "empathy": 90,
+    "verbosity": 50
+  },
+  "rules": [
+    {"id": "rule-uuid-001", "text": "Sprich mich mit Du an", "enabled": true},
+    {"text": "Erinnere mich an Pausen", "enabled": true}
+  ],
+  "custom_instructions": "Sei besonders geduldig mit mir."
+}
+```
+
+**Request Schema:**
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|---|---|---|---|---|
+| `name` | `str` | Nein | Min 1, Max 100 Zeichen | Neuer Profilname |
+| `traits` | `object` | Nein | Werte 0-100 | Neue Trait-Werte (ersetzt komplett) |
+| `rules` | `object[]` | Nein | Max 20 Rules | Neue Rules (ersetzt komplett; vorhandene IDs behalten, neue bekommen generierte ID) |
+| `custom_instructions` | `str | null` | Nein | Max 2000 Zeichen | Neue Freitext-Anweisungen (null = loeschen) |
+
+**Response 200 OK:** `PersonalityProfileResponse` (aktualisiertes Profil)
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 404 | `PERSONALITY_PROFILE_NOT_FOUND` | Profil existiert nicht oder gehoert nicht dem User |
+| 422 | `VALIDATION_ERROR` | Validierungsfehler |
+
+---
+
+### `DELETE /api/v1/personality/profiles/{id}`
+
+Loescht ein Persoenlichkeitsprofil. Das aktive Profil kann nicht geloescht werden -- es muss zuerst ein anderes Profil aktiviert werden.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Path Parameter:**
+
+| Parameter | Typ | Beschreibung |
+|---|---|---|
+| `id` | UUID | Profil-ID |
+
+**Response 204 No Content:**
+Kein Response Body.
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 404 | `PERSONALITY_PROFILE_NOT_FOUND` | Profil existiert nicht oder gehoert nicht dem User |
+| 409 | `ACTIVE_PROFILE_CANNOT_BE_DELETED` | Aktives Profil kann nicht geloescht werden |
+
+---
+
+### `POST /api/v1/personality/profiles/{id}/activate`
+
+Aktiviert ein Persoenlichkeitsprofil. Das zuvor aktive Profil wird automatisch deaktiviert (nur ein aktives Profil pro User).
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Path Parameter:**
+
+| Parameter | Typ | Beschreibung |
+|---|---|---|
+| `id` | UUID | Profil-ID |
+
+**Request Body:** Kein Request Body erforderlich.
+
+**Response 200 OK:**
+```json
+{
+  "id": "prof-uuid-001",
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Mein Coach",
+  "is_active": true,
+  "template_id": "tmpl-uuid-001",
+  "template_name": "Strenger Coach",
+  "traits": {
+    "formality": 30,
+    "humor": 60,
+    "strictness": 50,
+    "empathy": 80,
+    "verbosity": 40
+  },
+  "rules": [
+    {"id": "rule-uuid-001", "text": "Sprich mich mit Du an", "enabled": true}
+  ],
+  "voice_style": {},
+  "custom_instructions": "Motiviere mich besonders morgens beim Aufstehen.",
+  "created_at": "2026-02-06T10:00:00Z",
+  "updated_at": "2026-02-06T12:00:00Z"
+}
+```
+
+**Response Schema:** `PersonalityProfileResponse` (mit `is_active: true`)
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 404 | `PERSONALITY_PROFILE_NOT_FOUND` | Profil existiert nicht oder gehoert nicht dem User |
+
+---
+
+### `GET /api/v1/personality/templates`
+
+Gibt alle verfuegbaren Persoenlichkeits-Templates zurueck. Templates sind vordefiniert und gelten fuer alle User.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Response 200 OK:**
+```json
+{
+  "items": [
+    {
+      "id": "tmpl-uuid-001",
+      "name": "Strenger Coach",
+      "description": "Direkt, fokussiert und ergebnisorientiert. Haelt dich auf Kurs mit klaren Ansagen.",
+      "traits": {
+        "formality": 70,
+        "humor": 20,
+        "strictness": 90,
+        "empathy": 40,
+        "verbosity": 30
+      },
+      "rules": [],
+      "is_default": false,
+      "icon": "shield"
+    },
+    {
+      "id": "tmpl-uuid-002",
+      "name": "Freundlicher Begleiter",
+      "description": "Warmherzig, ermutigend und geduldig. Begleitet dich mit Verstaendnis.",
+      "traits": {
+        "formality": 20,
+        "humor": 70,
+        "strictness": 20,
+        "empathy": 90,
+        "verbosity": 60
+      },
+      "rules": [],
+      "is_default": true,
+      "icon": "heart"
+    },
+    {
+      "id": "tmpl-uuid-003",
+      "name": "Sachlicher Assistent",
+      "description": "Professionell, effizient und auf den Punkt. Klare Informationen ohne Umschweife.",
+      "traits": {
+        "formality": 80,
+        "humor": 10,
+        "strictness": 50,
+        "empathy": 50,
+        "verbosity": 40
+      },
+      "rules": [],
+      "is_default": false,
+      "icon": "briefcase"
+    },
+    {
+      "id": "tmpl-uuid-004",
+      "name": "Motivierende Cheerleaderin",
+      "description": "Energetisch, positiv und feiernd. Jeder kleine Erfolg wird gefeiert!",
+      "traits": {
+        "formality": 10,
+        "humor": 80,
+        "strictness": 30,
+        "empathy": 80,
+        "verbosity": 70
+      },
+      "rules": [],
+      "is_default": false,
+      "icon": "star"
+    }
+  ],
+  "total_count": 4
+}
+```
+
+**Response Schema:**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `items` | `PersonalityTemplateResponse[]` | Liste der Templates |
+| `total_count` | `int` | Gesamtanzahl Templates |
+
+**PersonalityTemplateResponse Schema:**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `id` | `UUID` | Eindeutige Template-ID |
+| `name` | `str` | Template-Name |
+| `description` | `str` | Beschreibung des Templates |
+| `traits` | `object` | Vorgegebene Trait-Werte |
+| `rules` | `object[]` | Vorgegebene Rules |
+| `is_default` | `bool` | Standard-Template fuer neue User? |
+| `icon` | `str | null` | Icon-Bezeichnung |
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+
+---
+
+### `GET /api/v1/personality/preview`
+
+Generiert eine kurze Vorschau-Nachricht mit dem aktuell aktiven Persoenlichkeitsprofil. Nuetzlich fuer den Personality Editor, um Aenderungen sofort zu sehen.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 10/min (AI-Endpoint)
+
+**Query Parameter:**
+
+| Parameter | Typ | Default | Beschreibung |
+|---|---|---|---|
+| `message` | str | "Wie geht es dir heute?" | Test-Nachricht fuer die Vorschau |
+
+**Response 200 OK:**
+```json
+{
+  "preview_response": "Hey! Mir geht's super, danke der Nachfrage. Und bei dir? Hast du schon deine Tasks fuer heute gecheckt? Lass uns mal schauen, was ansteht!",
+  "profile_name": "Mein Coach",
+  "traits_used": {
+    "formality": 30,
+    "humor": 60,
+    "strictness": 50,
+    "empathy": 80,
+    "verbosity": 40
+  }
+}
+```
+
+**Response Schema:**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `preview_response` | `str` | Generierte Vorschau-Nachricht |
+| `profile_name` | `str` | Name des verwendeten Profils |
+| `traits_used` | `object` | Trait-Werte, die fuer die Generierung verwendet wurden |
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 404 | `PERSONALITY_PROFILE_NOT_FOUND` | Kein aktives Profil vorhanden |
+| 429 | `RATE_LIMIT_EXCEEDED` | Zu viele Preview-Anfragen |
+| 503 | `AI_SERVICE_UNAVAILABLE` | KI-Service nicht erreichbar |
+
+---
+
+## Proactive Endpoints
+
+Alle Proactive-Endpoints sind unter `/api/v1/proactive/` gruppiert. Alle erfordern Authentifizierung. Der Proactive-Bereich verwaltet automatisch aus Chat-Nachrichten extrahierte "Mentioned Items" (Tasks, Termine, Ideen, Follow-Ups, Reminders).
+
+### `GET /api/v1/proactive/mentioned-items`
+
+Gibt eine paginierte Liste der Mentioned Items des Nutzers zurueck.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Query Parameter:**
+
+| Parameter | Typ | Default | Beschreibung |
+|---|---|---|---|
+| `cursor` | UUID | null | Cursor fuer Pagination |
+| `limit` | int | 20 | Items pro Seite (max 100) |
+| `status` | str | `pending` | Filter nach Status: `pending`, `converted`, `dismissed`, `snoozed` |
+| `item_type` | str | null | Filter nach Typ: `task`, `appointment`, `idea`, `follow_up`, `reminder` |
+
+**Response 200 OK:**
+```json
+{
+  "items": [
+    {
+      "id": "mi-uuid-001",
+      "user_id": "550e8400-e29b-41d4-a716-446655440000",
+      "message_id": "msg-uuid-002",
+      "item_type": "task",
+      "content": "Arzttermin vereinbaren",
+      "status": "pending",
+      "extracted_data": {
+        "suggested_title": "Arzttermin vereinbaren",
+        "suggested_priority": "high",
+        "suggested_due_date": "2026-02-10",
+        "confidence": 0.92,
+        "context_snippet": "Ich muss unbedingt diese Woche noch zum Arzt..."
+      },
+      "converted_to_id": null,
+      "converted_to_type": null,
+      "snoozed_until": null,
+      "created_at": "2026-02-06T07:00:02Z"
+    },
+    {
+      "id": "mi-uuid-002",
+      "user_id": "550e8400-e29b-41d4-a716-446655440000",
+      "message_id": "msg-uuid-002",
+      "item_type": "idea",
+      "content": "Meal-Prep am Sonntag ausprobieren",
+      "status": "pending",
+      "extracted_data": {
+        "suggested_title": "Meal-Prep am Sonntag ausprobieren",
+        "confidence": 0.78,
+        "context_snippet": "Vielleicht sollte ich mal Meal-Prep ausprobieren..."
+      },
+      "converted_to_id": null,
+      "converted_to_type": null,
+      "snoozed_until": null,
+      "created_at": "2026-02-06T07:00:02Z"
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false,
+  "total_count": 2
+}
+```
+
+**Response Schema (MentionedItemResponse):**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `id` | `UUID` | Eindeutige Item-ID |
+| `user_id` | `UUID` | Zugehoeriger Benutzer |
+| `message_id` | `UUID` | Quell-Nachricht |
+| `item_type` | `str` | `task`, `appointment`, `idea`, `follow_up`, `reminder` |
+| `content` | `str` | Extrahierter Inhalt |
+| `status` | `str` | `pending`, `converted`, `dismissed`, `snoozed` |
+| `extracted_data` | `object` | Strukturierte extrahierte Daten (Vorschlaege, Konfidenz, Kontext) |
+| `converted_to_id` | `UUID | null` | ID des erstellten Tasks/Brain-Eintrags |
+| `converted_to_type` | `str | null` | `task` oder `brain_entry` |
+| `snoozed_until` | `datetime | null` | Snoozed bis (wenn Status = snoozed) |
+| `created_at` | `datetime` | Erstellungszeitpunkt |
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 422 | `VALIDATION_ERROR` | Ungueltiger Filter-Wert |
+
+---
+
+### `POST /api/v1/proactive/mentioned-items/{id}/convert`
+
+Konvertiert ein Mentioned Item in einen Task oder Brain-Eintrag. Der Status wird auf `converted` gesetzt.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Path Parameter:**
+
+| Parameter | Typ | Beschreibung |
+|---|---|---|
+| `id` | UUID | Mentioned-Item-ID |
+
+**Request Body:**
+```json
+{
+  "convert_to": "task",
+  "task_data": {
+    "title": "Arzttermin vereinbaren",
+    "priority": "high",
+    "due_date": "2026-02-10T14:00:00Z",
+    "tags": ["gesundheit"]
+  }
+}
+```
+
+**Request Schema:**
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|---|---|---|---|---|
+| `convert_to` | `str` | Ja | `task` oder `brain_entry` | Ziel-Typ der Konvertierung |
+| `task_data` | `object` | Bedingt | Pflicht wenn `convert_to = task` | Task-Daten (siehe TaskCreate Schema) |
+| `brain_entry_data` | `object` | Bedingt | Pflicht wenn `convert_to = brain_entry` | Brain-Entry-Daten (siehe BrainEntryCreate Schema) |
+
+**Response 200 OK (Konvertierung zu Task):**
+```json
+{
+  "mentioned_item": {
+    "id": "mi-uuid-001",
+    "status": "converted",
+    "converted_to_id": "new-task-uuid",
+    "converted_to_type": "task"
+  },
+  "created_task": {
+    "id": "new-task-uuid",
+    "title": "Arzttermin vereinbaren",
+    "priority": "high",
+    "status": "open",
+    "source": "chat_extract",
+    "source_message_id": "msg-uuid-002"
+  }
+}
+```
+
+**Response Schema:**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `mentioned_item` | `MentionedItemResponse` | Aktualisiertes Mentioned Item (status=converted) |
+| `created_task` | `TaskResponse` | Erstellter Task (wenn convert_to=task) |
+| `created_brain_entry` | `BrainEntryResponse` | Erstellter Brain-Eintrag (wenn convert_to=brain_entry) |
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 404 | `MENTIONED_ITEM_NOT_FOUND` | Item existiert nicht oder gehoert nicht dem User |
+| 409 | `MENTIONED_ITEM_ALREADY_CONVERTED` | Item wurde bereits konvertiert |
+| 422 | `VALIDATION_ERROR` | Validierungsfehler in den Ziel-Daten |
+
+---
+
+### `POST /api/v1/proactive/mentioned-items/{id}/dismiss`
+
+Verwirft ein Mentioned Item. Der Status wird auf `dismissed` gesetzt.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Path Parameter:**
+
+| Parameter | Typ | Beschreibung |
+|---|---|---|
+| `id` | UUID | Mentioned-Item-ID |
+
+**Request Body:** Kein Request Body erforderlich.
+
+**Response 200 OK:**
+```json
+{
+  "id": "mi-uuid-001",
+  "status": "dismissed",
+  "content": "Arzttermin vereinbaren",
+  "item_type": "task"
+}
+```
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 404 | `MENTIONED_ITEM_NOT_FOUND` | Item existiert nicht oder gehoert nicht dem User |
+
+---
+
+### `POST /api/v1/proactive/mentioned-items/{id}/snooze`
+
+Snoozet ein Mentioned Item bis zu einem bestimmten Zeitpunkt. Der Status wird auf `snoozed` gesetzt.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Path Parameter:**
+
+| Parameter | Typ | Beschreibung |
+|---|---|---|
+| `id` | UUID | Mentioned-Item-ID |
+
+**Request Body:**
+```json
+{
+  "until": "2026-02-07T09:00:00Z"
+}
+```
+
+**Request Schema:**
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|---|---|---|---|---|
+| `until` | `datetime` | Ja | Muss in der Zukunft liegen, max 30 Tage | Snoozed bis zu diesem Zeitpunkt |
+
+**Response 200 OK:**
+```json
+{
+  "id": "mi-uuid-001",
+  "status": "snoozed",
+  "content": "Arzttermin vereinbaren",
+  "item_type": "task",
+  "snoozed_until": "2026-02-07T09:00:00Z"
+}
+```
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 404 | `MENTIONED_ITEM_NOT_FOUND` | Item existiert nicht oder gehoert nicht dem User |
+| 422 | `VALIDATION_ERROR` | Zeitpunkt in der Vergangenheit oder zu weit in der Zukunft |
+
+---
+
 ## Fehlercodes
 
 ### Allgemeine HTTP Status Codes
@@ -736,7 +2148,7 @@ WebSocket-Verbindung fuer Echtzeit-Chat-Kommunikation. Alternative zum SSE-basie
 | 401 | Unauthorized -- Nicht authentifiziert |
 | 403 | Forbidden -- Keine Berechtigung |
 | 404 | Not Found -- Ressource nicht gefunden |
-| 409 | Conflict -- Ressource existiert bereits |
+| 409 | Conflict -- Ressource existiert bereits oder Statuskonflikt |
 | 422 | Unprocessable Entity -- Validierungsfehler |
 | 429 | Too Many Requests -- Rate Limit ueberschritten |
 | 500 | Internal Server Error -- Serverfehler |
@@ -744,23 +2156,34 @@ WebSocket-Verbindung fuer Echtzeit-Chat-Kommunikation. Alternative zum SSE-basie
 
 ### Anwendungsspezifische Fehlercodes
 
-| Code | HTTP Status | Beschreibung |
-|---|---|---|
-| `EMAIL_ALREADY_EXISTS` | 409 | E-Mail bereits registriert |
-| `INVALID_CREDENTIALS` | 401 | Falsche Login-Daten |
-| `ACCOUNT_DISABLED` | 403 | Account deaktiviert |
-| `UNAUTHORIZED` | 401 | Token fehlt oder ungueltig |
-| `TOKEN_EXPIRED` | 401 | Token abgelaufen |
-| `INVALID_REFRESH_TOKEN` | 401 | Refresh Token ungueltig |
-| `CONVERSATION_NOT_FOUND` | 404 | Konversation nicht gefunden |
-| `VALIDATION_ERROR` | 422 | Eingabevalidierung fehlgeschlagen |
-| `RATE_LIMIT_EXCEEDED` | 429 | Zu viele Anfragen |
-| `AI_SERVICE_UNAVAILABLE` | 503 | KI-Service nicht erreichbar |
-| `INTERNAL_ERROR` | 500 | Interner Serverfehler |
+| Code | HTTP Status | Beschreibung | Phase |
+|---|---|---|---|
+| `EMAIL_ALREADY_EXISTS` | 409 | E-Mail bereits registriert | 1 |
+| `INVALID_CREDENTIALS` | 401 | Falsche Login-Daten | 1 |
+| `ACCOUNT_DISABLED` | 403 | Account deaktiviert | 1 |
+| `UNAUTHORIZED` | 401 | Token fehlt oder ungueltig | 1 |
+| `TOKEN_EXPIRED` | 401 | Token abgelaufen | 1 |
+| `INVALID_REFRESH_TOKEN` | 401 | Refresh Token ungueltig | 1 |
+| `CONVERSATION_NOT_FOUND` | 404 | Konversation nicht gefunden | 1 |
+| `VALIDATION_ERROR` | 422 | Eingabevalidierung fehlgeschlagen | 1 |
+| `RATE_LIMIT_EXCEEDED` | 429 | Zu viele Anfragen | 1 |
+| `AI_SERVICE_UNAVAILABLE` | 503 | KI-Service nicht erreichbar | 1 |
+| `INTERNAL_ERROR` | 500 | Interner Serverfehler | 1 |
+| `TASK_NOT_FOUND` | 404 | Task nicht gefunden | 2 |
+| `TASK_ALREADY_COMPLETED` | 409 | Task ist bereits erledigt | 2 |
+| `BRAIN_ENTRY_NOT_FOUND` | 404 | Brain-Eintrag nicht gefunden | 2 |
+| `SEARCH_UNAVAILABLE` | 503 | Embedding-Service nicht verfuegbar | 2 |
+| `PERSONALITY_PROFILE_NOT_FOUND` | 404 | Persoenlichkeitsprofil nicht gefunden | 2 |
+| `PERSONALITY_TEMPLATE_NOT_FOUND` | 404 | Persoenlichkeits-Template nicht gefunden | 2 |
+| `ACTIVE_PROFILE_CANNOT_BE_DELETED` | 409 | Aktives Profil kann nicht geloescht werden | 2 |
+| `MENTIONED_ITEM_NOT_FOUND` | 404 | Mentioned Item nicht gefunden | 2 |
+| `MENTIONED_ITEM_ALREADY_CONVERTED` | 409 | Mentioned Item bereits konvertiert | 2 |
 
 ---
 
-## Zusammenfassung Phase 1
+## Zusammenfassung
+
+### Phase 1: Foundation
 
 | Method | Path | Beschreibung | Auth | Rate Limit |
 |---|---|---|---|---|
@@ -775,50 +2198,40 @@ WebSocket-Verbindung fuer Echtzeit-Chat-Kommunikation. Alternative zum SSE-basie
 | GET | `/api/v1/chat/conversations/{id}/messages` | Nachrichten einer Konversation | Ja | 60/min |
 | WS | `/api/v1/chat/ws` | WebSocket Echtzeit-Chat | Ja (Query) | -- |
 
----
-
-## Geplante Endpoints (Phase 2-4)
-
-> Diese Endpoints werden spezifiziert, wenn die jeweilige Phase implementiert wird.
-
 ### Phase 2: Core Features
 
-| Method | Path | Beschreibung |
-|---|---|---|
-| POST | `/api/v1/tasks` | Task erstellen |
-| GET | `/api/v1/tasks` | Tasks auflisten |
-| GET | `/api/v1/tasks/{id}` | Task abrufen |
-| PUT | `/api/v1/tasks/{id}` | Task aktualisieren |
-| DELETE | `/api/v1/tasks/{id}` | Task loeschen |
-| POST | `/api/v1/tasks/{id}/complete` | Task erledigen (+XP) |
-| POST | `/api/v1/tasks/{id}/breakdown` | Task aufteilen (AI) |
-| GET | `/api/v1/tasks/today` | Heutige Tasks |
-| POST | `/api/v1/brain/entries` | Brain-Eintrag erstellen |
-| GET | `/api/v1/brain/entries` | Eintraege auflisten |
-| GET | `/api/v1/brain/entries/{id}` | Eintrag abrufen |
-| PUT | `/api/v1/brain/entries/{id}` | Eintrag aktualisieren |
-| DELETE | `/api/v1/brain/entries/{id}` | Eintrag loeschen |
-| GET | `/api/v1/brain/search` | Semantische Suche |
-| POST | `/api/v1/brain/ingest` | URL/Datei importieren |
-| GET | `/api/v1/proactive/mentioned-items` | Mentioned Items auflisten |
-| POST | `/api/v1/proactive/mentioned-items/{id}/convert` | Item konvertieren |
-| POST | `/api/v1/proactive/mentioned-items/{id}/dismiss` | Item verwerfen |
-| GET | `/api/v1/proactive/daily-plan` | Tagesplan abrufen |
-| GET | `/api/v1/proactive/settings` | Proaktive Einstellungen lesen |
-| PUT | `/api/v1/proactive/settings` | Proaktive Einstellungen aendern |
-| POST | `/api/v1/proactive/snooze` | Notifications snoozen |
-| POST | `/api/v1/personality/profiles` | Profil erstellen |
-| GET | `/api/v1/personality/profiles` | Profile auflisten |
-| PUT | `/api/v1/personality/profiles/{id}` | Profil bearbeiten |
-| DELETE | `/api/v1/personality/profiles/{id}` | Profil loeschen |
-| POST | `/api/v1/personality/profiles/{id}/activate` | Profil aktivieren |
-| GET | `/api/v1/personality/traits` | Traits lesen |
-| PUT | `/api/v1/personality/traits` | Traits aendern |
-| GET | `/api/v1/personality/rules` | Rules lesen |
-| POST | `/api/v1/personality/rules` | Rule hinzufuegen |
-| DELETE | `/api/v1/personality/rules/{id}` | Rule loeschen |
-| GET | `/api/v1/personality/templates` | Templates auflisten |
-| GET | `/api/v1/personality/preview` | Personality Preview |
+| Method | Path | Beschreibung | Auth | Rate Limit |
+|---|---|---|---|---|
+| POST | `/api/v1/tasks` | Task erstellen | Ja | 60/min |
+| GET | `/api/v1/tasks` | Tasks auflisten (paginiert, gefiltert) | Ja | 60/min |
+| GET | `/api/v1/tasks/today` | Heutige Tasks | Ja | 60/min |
+| GET | `/api/v1/tasks/{id}` | Task abrufen (inkl. Sub-Tasks) | Ja | 60/min |
+| PUT | `/api/v1/tasks/{id}` | Task aktualisieren (Partial Update) | Ja | 60/min |
+| DELETE | `/api/v1/tasks/{id}` | Task loeschen (CASCADE Sub-Tasks) | Ja | 60/min |
+| POST | `/api/v1/tasks/{id}/complete` | Task erledigen (+XP, Level, Streak) | Ja | 60/min |
+| POST | `/api/v1/brain/entries` | Brain-Eintrag erstellen | Ja | 60/min |
+| GET | `/api/v1/brain/entries` | Eintraege auflisten (paginiert, gefiltert) | Ja | 60/min |
+| GET | `/api/v1/brain/entries/{id}` | Eintrag abrufen | Ja | 60/min |
+| PUT | `/api/v1/brain/entries/{id}` | Eintrag aktualisieren (Re-Embedding bei Content-Aenderung) | Ja | 60/min |
+| DELETE | `/api/v1/brain/entries/{id}` | Eintrag loeschen (CASCADE Embeddings) | Ja | 60/min |
+| GET | `/api/v1/brain/search` | Semantische Suche (pgvector Cosine Similarity) | Ja | 60/min |
+| POST | `/api/v1/personality/profiles` | Profil erstellen (optional aus Template) | Ja | 60/min |
+| GET | `/api/v1/personality/profiles` | Profile auflisten | Ja | 60/min |
+| PUT | `/api/v1/personality/profiles/{id}` | Profil bearbeiten | Ja | 60/min |
+| DELETE | `/api/v1/personality/profiles/{id}` | Profil loeschen | Ja | 60/min |
+| POST | `/api/v1/personality/profiles/{id}/activate` | Profil aktivieren | Ja | 60/min |
+| GET | `/api/v1/personality/templates` | Templates auflisten | Ja | 60/min |
+| GET | `/api/v1/personality/preview` | Personality Preview (AI-generiert) | Ja | 10/min |
+| GET | `/api/v1/proactive/mentioned-items` | Mentioned Items auflisten | Ja | 60/min |
+| POST | `/api/v1/proactive/mentioned-items/{id}/convert` | Item zu Task/Brain-Eintrag konvertieren | Ja | 60/min |
+| POST | `/api/v1/proactive/mentioned-items/{id}/dismiss` | Item verwerfen | Ja | 60/min |
+| POST | `/api/v1/proactive/mentioned-items/{id}/snooze` | Item snoozen | Ja | 60/min |
+
+---
+
+## Geplante Endpoints (Phase 3-4)
+
+> Diese Endpoints werden spezifiziert, wenn die jeweilige Phase implementiert wird.
 
 ### Phase 3: ADHS-Modus
 

@@ -13,6 +13,7 @@ from app.models.base import BaseModel
 
 if TYPE_CHECKING:
     from app.models.conversation import Conversation
+    from app.models.mentioned_item import MentionedItem
 
 
 class MessageRole(str, enum.Enum):
@@ -37,7 +38,7 @@ class Message(BaseModel):
     )
 
     role: Mapped[MessageRole] = mapped_column(
-        SQLEnum(MessageRole, name="message_role", create_type=True),
+        SQLEnum(MessageRole, name="message_role", create_type=False, values_callable=lambda e: [x.value for x in e]),
         nullable=False,
         comment="Message role: user, assistant, or system",
     )
@@ -59,6 +60,12 @@ class Message(BaseModel):
     # Relationships
     conversation: Mapped["Conversation"] = relationship(
         back_populates="messages",
+        lazy="selectin",
+    )
+
+    mentioned_items: Mapped[list["MentionedItem"]] = relationship(
+        back_populates="message",
+        cascade="all, delete-orphan",
         lazy="selectin",
     )
 

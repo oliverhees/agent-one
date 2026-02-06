@@ -1,6 +1,7 @@
 """Database configuration and session management."""
 
 from typing import AsyncGenerator
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     create_async_engine,
@@ -57,21 +58,28 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    """Initialize database connection on startup."""
-    from app.models.base import Base
+    """Initialize database connection on startup.
 
+    Schema creation is managed by Alembic migrations (run via CLI).
+    This function only verifies connectivity and imports models.
+    """
+    # Import all models to ensure they are registered with SQLAlchemy
+    from app.models import (  # noqa: F401
+        User,
+        Conversation,
+        Message,
+        RefreshToken,
+        Task,
+        BrainEntry,
+        BrainEmbedding,
+        MentionedItem,
+        PersonalityProfile,
+        PersonalityTemplate,
+    )
+
+    # Verify database connectivity
     async with engine.begin() as conn:
-        # Import all models here to ensure they are registered
-        from app.models import (  # noqa: F401
-            User,
-            Conversation,
-            Message,
-            RefreshToken,
-        )
-
-        # Create all tables (only for development, use Alembic in production)
-        if settings.app_env == "development":
-            await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(sa.text("SELECT 1"))
 
 
 async def close_db() -> None:

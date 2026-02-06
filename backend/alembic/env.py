@@ -19,6 +19,12 @@ from app.models import (  # noqa: F401
     Conversation,
     Message,
     RefreshToken,
+    Task,
+    BrainEntry,
+    BrainEmbedding,
+    MentionedItem,
+    PersonalityProfile,
+    PersonalityTemplate,
 )
 
 # this is the Alembic Config object, which provides
@@ -30,8 +36,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Override sqlalchemy.url with our settings
-config.set_main_option("sqlalchemy.url", settings.sync_database_url)
+# Override sqlalchemy.url with our settings (use async URL since only asyncpg is available)
+config.set_main_option("sqlalchemy.url", settings.async_database_url)
 
 # add your model's MetaData object here
 # for 'autogenerate' support
@@ -77,7 +83,7 @@ def do_run_migrations(connection: Connection) -> None:
 async def run_async_migrations() -> None:
     """Run migrations in 'online' mode with async support."""
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = settings.sync_database_url
+    configuration["sqlalchemy.url"] = settings.async_database_url
 
     connectable = async_engine_from_config(
         configuration,

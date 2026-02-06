@@ -8,8 +8,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import BaseModel
 
 if TYPE_CHECKING:
+    from app.models.brain_entry import BrainEntry
     from app.models.conversation import Conversation
+    from app.models.mentioned_item import MentionedItem
+    from app.models.personality_profile import PersonalityProfile
     from app.models.refresh_token import RefreshToken
+    from app.models.task import Task
 
 
 class User(BaseModel):
@@ -59,6 +63,30 @@ class User(BaseModel):
     )
 
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    tasks: Mapped[list["Task"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    brain_entries: Mapped[list["BrainEntry"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    mentioned_items: Mapped[list["MentionedItem"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    personality_profiles: Mapped[list["PersonalityProfile"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",
