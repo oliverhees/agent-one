@@ -164,109 +164,18 @@ def upgrade() -> None:
 
     # -- Seed: achievements -------------------------------------------------
 
-    achievements_table = sa.table(
-        'achievements',
-        sa.column('id', postgresql.UUID(as_uuid=True)),
-        sa.column('name', sa.String),
-        sa.column('description', sa.Text),
-        sa.column('icon', sa.String),
-        sa.column('category', sa.String),
-        sa.column('condition_type', sa.String),
-        sa.column('condition_value', sa.Integer),
-        sa.column('xp_reward', sa.Integer),
-        sa.column('is_active', sa.Boolean),
-    )
-
-    op.bulk_insert(achievements_table, [
-        {
-            'id': str(uuid4()),
-            'name': 'First Steps',
-            'description': 'Erledige deinen ersten Task.',
-            'icon': '\U0001f3af',
-            'category': 'task',
-            'condition_type': 'tasks_completed',
-            'condition_value': 1,
-            'xp_reward': 50,
-            'is_active': True,
-        },
-        {
-            'id': str(uuid4()),
-            'name': 'Getting Things Done',
-            'description': 'Erledige 10 Tasks.',
-            'icon': '\u2705',
-            'category': 'task',
-            'condition_type': 'tasks_completed',
-            'condition_value': 10,
-            'xp_reward': 100,
-            'is_active': True,
-        },
-        {
-            'id': str(uuid4()),
-            'name': 'Century Club',
-            'description': 'Erledige 100 Tasks.',
-            'icon': '\U0001f4af',
-            'category': 'task',
-            'condition_type': 'tasks_completed',
-            'condition_value': 100,
-            'xp_reward': 500,
-            'is_active': True,
-        },
-        {
-            'id': str(uuid4()),
-            'name': 'Week Warrior',
-            'description': 'Halte eine Streak von 7 Tagen.',
-            'icon': '\U0001f525',
-            'category': 'streak',
-            'condition_type': 'streak_days',
-            'condition_value': 7,
-            'xp_reward': 150,
-            'is_active': True,
-        },
-        {
-            'id': str(uuid4()),
-            'name': 'Dedicated',
-            'description': 'Halte eine Streak von 30 Tagen.',
-            'icon': '\u2b50',
-            'category': 'streak',
-            'condition_type': 'streak_days',
-            'condition_value': 30,
-            'xp_reward': 500,
-            'is_active': True,
-        },
-        {
-            'id': str(uuid4()),
-            'name': 'Brain Scholar',
-            'description': 'Erstelle 10 Brain-Eintraege.',
-            'icon': '\U0001f9e0',
-            'category': 'brain',
-            'condition_type': 'brain_entries',
-            'condition_value': 10,
-            'xp_reward': 100,
-            'is_active': True,
-        },
-        {
-            'id': str(uuid4()),
-            'name': 'Knowledge Base',
-            'description': 'Erstelle 50 Brain-Eintraege.',
-            'icon': '\U0001f4da',
-            'category': 'brain',
-            'condition_type': 'brain_entries',
-            'condition_value': 50,
-            'xp_reward': 300,
-            'is_active': True,
-        },
-        {
-            'id': str(uuid4()),
-            'name': 'Speed Demon',
-            'description': 'Erledige einen Task in unter 5 Minuten.',
-            'icon': '\u26a1',
-            'category': 'special',
-            'condition_type': 'task_under_5min',
-            'condition_value': 1,
-            'xp_reward': 75,
-            'is_active': True,
-        },
-    ])
+    # Seed achievements using raw SQL to avoid VARCHAR/ENUM cast issues
+    op.execute("""
+        INSERT INTO achievements (id, name, description, icon, category, condition_type, condition_value, xp_reward, is_active) VALUES
+        (gen_random_uuid(), 'First Steps', 'Erledige deinen ersten Task.', '🎯', 'task', 'tasks_completed', 1, 50, true),
+        (gen_random_uuid(), 'Getting Things Done', 'Erledige 10 Tasks.', '✅', 'task', 'tasks_completed', 10, 100, true),
+        (gen_random_uuid(), 'Century Club', 'Erledige 100 Tasks.', '💯', 'task', 'tasks_completed', 100, 500, true),
+        (gen_random_uuid(), 'Week Warrior', 'Halte eine Streak von 7 Tagen.', '🔥', 'streak', 'streak_days', 7, 150, true),
+        (gen_random_uuid(), 'Dedicated', 'Halte eine Streak von 30 Tagen.', '⭐', 'streak', 'streak_days', 30, 500, true),
+        (gen_random_uuid(), 'Brain Scholar', 'Erstelle 10 Brain-Eintraege.', '🧠', 'brain', 'brain_entries', 10, 100, true),
+        (gen_random_uuid(), 'Knowledge Base', 'Erstelle 50 Brain-Eintraege.', '📚', 'brain', 'brain_entries', 50, 300, true),
+        (gen_random_uuid(), 'Speed Demon', 'Erledige einen Task in unter 5 Minuten.', '⚡', 'special', 'task_under_5min', 1, 75, true)
+    """)
 
 
 def downgrade() -> None:
