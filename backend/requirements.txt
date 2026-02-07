@@ -29,3 +29,6 @@ python-multipart==0.0.*
 
 # Environment variables
 python-dotenv==1.0.*
+
+# Voice
+edge-tts==7.*

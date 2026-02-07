@@ -159,3 +159,191 @@ class TestSettingsValidation:
             json={"preferred_reminder_times": ["09:00", "noon"]},
         )
         assert response.status_code == 422
+
+
+# ===========================================================================
+# API Keys Management (GET/PUT /api/v1/settings/api-keys)
+# ===========================================================================
+
+class TestApiKeys:
+    """Tests for API keys management."""
+
+    async def test_get_api_keys_empty(self, authenticated_client: AsyncClient, test_user):
+        """GET /api/v1/settings/api-keys returns None for all keys by default."""
+        response = await authenticated_client.get("/api/v1/settings/api-keys")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["anthropic"] is None
+        assert data["elevenlabs"] is None
+        assert data["deepgram"] is None
+
+    async def test_save_api_keys_all(self, authenticated_client: AsyncClient, test_user):
+        """PUT /api/v1/settings/api-keys saves all provided keys."""
+        response = await authenticated_client.put(
+            "/api/v1/settings/api-keys",
+            json={
+                "anthropic": "sk-ant-api03-test123456789012345678901234567890",
+                "elevenlabs": "el_test_key_abcdefghijklmnop",
+                "deepgram": "dg_test_key_xyz9876543210",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Keys should be masked (last 4 characters)
+        assert data["anthropic"] == "...7890"
+        assert data["elevenlabs"] == "...mnop"
+        assert data["deepgram"] == "...3210"
+
+    async def test_save_api_keys_partial(self, authenticated_client: AsyncClient, test_user):
+        """PUT /api/v1/settings/api-keys can update only one key."""
+        # Save initial keys
+        await authenticated_client.put(
+            "/api/v1/settings/api-keys",
+            json={"anthropic": "sk-ant-old-key-12345678"},
+        )
+
+        # Update only elevenlabs
+        response = await authenticated_client.put(
+            "/api/v1/settings/api-keys",
+            json={"elevenlabs": "el_new_key_9999"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Old key preserved
+        assert data["anthropic"] == "...5678"
+        # New key saved
+        assert data["elevenlabs"] == "...9999"
+        # Unchanged
+        assert data["deepgram"] is None
+
+    async def test_get_api_keys_after_save(self, authenticated_client: AsyncClient, test_user):
+        """GET /api/v1/settings/api-keys returns masked keys after save."""
+        # Save keys
+        await authenticated_client.put(
+            "/api/v1/settings/api-keys",
+            json={"anthropic": "sk-ant-secret-key-abcd1234"},
+        )
+
+        # Get keys
+        response = await authenticated_client.get("/api/v1/settings/api-keys")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["anthropic"] == "...1234"
+        assert data["elevenlabs"] is None
+        assert data["deepgram"] is None
+
+    async def test_api_keys_unauthorized(self, client: AsyncClient):
+        """403 without auth."""
+        response = await client.get("/api/v1/settings/api-keys")
+        assert response.status_code == 403
+
+        response = await client.put(
+            "/api/v1/settings/api-keys",
+            json={"anthropic": "sk-test"},
+        )
+        assert response.status_code == 403
+
+    async def test_api_keys_validation_empty_string(
+        self, authenticated_client: AsyncClient, test_user
+    ):
+        """Empty string should fail validation."""
+        response = await authenticated_client.put(
+            "/api/v1/settings/api-keys",
+            json={"anthropic": ""},
+        )
+        assert response.status_code == 422
+
+
+# ===========================================================================
+# Voice Providers (GET/PUT /api/v1/settings/voice-providers)
+# ===========================================================================
+
+class TestVoiceProviders:
+    """Tests for voice provider settings."""
+
+    async def test_get_voice_providers_defaults(
+        self, authenticated_client: AsyncClient, test_user
+    ):
+        """GET /api/v1/settings/voice-providers returns defaults."""
+        response = await authenticated_client.get("/api/v1/settings/voice-providers")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["stt_provider"] == "deepgram"
+        assert data["tts_provider"] == "elevenlabs"
+
+    async def test_update_stt_provider(self, authenticated_client: AsyncClient, test_user):
+        """PUT /api/v1/settings/voice-providers can update STT provider."""
+        response = await authenticated_client.put(
+            "/api/v1/settings/voice-providers",
+            json={"stt_provider": "whisper"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["stt_provider"] == "whisper"
+        # TTS unchanged
+        assert data["tts_provider"] == "elevenlabs"
+
+    async def test_update_tts_provider(self, authenticated_client: AsyncClient, test_user):
+        """PUT /api/v1/settings/voice-providers can update TTS provider."""
+        response = await authenticated_client.put(
+            "/api/v1/settings/voice-providers",
+            json={"tts_provider": "edge-tts"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["stt_provider"] == "deepgram"
+        assert data["tts_provider"] == "edge-tts"
+
+    async def test_update_both_providers(self, authenticated_client: AsyncClient, test_user):
+        """PUT /api/v1/settings/voice-providers can update both at once."""
+        response = await authenticated_client.put(
+            "/api/v1/settings/voice-providers",
+            json={"stt_provider": "whisper", "tts_provider": "edge-tts"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["stt_provider"] == "whisper"
+        assert data["tts_provider"] == "edge-tts"
+
+    async def test_invalid_stt_provider(self, authenticated_client: AsyncClient, test_user):
+        """Invalid STT provider should fail validation."""
+        response = await authenticated_client.put(
+            "/api/v1/settings/voice-providers",
+            json={"stt_provider": "unknown"},
+        )
+        assert response.status_code == 422
+
+    async def test_invalid_tts_provider(self, authenticated_client: AsyncClient, test_user):
+        """Invalid TTS provider should fail validation."""
+        response = await authenticated_client.put(
+            "/api/v1/settings/voice-providers",
+            json={"tts_provider": "unknown"},
+        )
+        assert response.status_code == 422
+
+    async def test_voice_providers_unauthorized(self, client: AsyncClient):
+        """403 without auth."""
+        response = await client.get("/api/v1/settings/voice-providers")
+        assert response.status_code == 403
+
+        response = await client.put(
+            "/api/v1/settings/voice-providers",
+            json={"stt_provider": "whisper"},
+        )
+        assert response.status_code == 403

@@ -85,3 +85,31 @@ async def init_db() -> None:
 async def close_db() -> None:
     """Close database connection on shutdown."""
     await engine.dispose()
+
+
+async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Create an async session for non-request contexts (WebSocket, background tasks).
+
+    This is similar to get_db() but returns an AsyncGenerator directly.
+    Use with async context manager:
+
+    Example:
+        ```python
+        async with get_async_session() as db:
+            result = await db.execute(select(User))
+            await db.commit()
+        ```
+
+    Yields:
+        AsyncSession: Database session
+    """
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()

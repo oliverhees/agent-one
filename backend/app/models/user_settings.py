@@ -24,6 +24,11 @@ DEFAULT_SETTINGS = {
     "preferred_reminder_times": ["09:00", "14:00", "18:00"],
     "expo_push_token": None,
     "notifications_enabled": True,
+    "display_name": None,
+    "onboarding_complete": False,
+    "api_keys": {},  # Encrypted API keys: {"anthropic": "encrypted...", "elevenlabs": "encrypted...", "deepgram": "encrypted..."}
+    "stt_provider": "deepgram",  # Default STT provider
+    "tts_provider": "elevenlabs",  # Default TTS provider
 }
 
 

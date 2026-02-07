@@ -5,6 +5,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore } from "../stores/authStore";
+import { useOnboardingStore } from "../stores/onboardingStore";
 import {
   initializePushNotifications,
   setupNotificationListeners,
@@ -28,6 +29,11 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const { isAuthenticated, isLoading, loadStoredAuth } = useAuthStore();
+  const {
+    onboardingComplete,
+    isLoading: onboardingLoading,
+    checkOnboardingStatus,
+  } = useOnboardingStore();
   const addNotification = useNotificationStore((s) => s.addNotification);
   const [mounted, setMounted] = useState(false);
 
@@ -35,6 +41,13 @@ export default function RootLayout() {
   useEffect(() => {
     loadStoredAuth();
   }, []);
+
+  // Check onboarding status when authenticated
+  useEffect(() => {
+    if (isAuthenticated && onboardingComplete === null) {
+      checkOnboardingStatus();
+    }
+  }, [isAuthenticated, onboardingComplete]);
 
   // Warten bis Layout gemountet ist
   useEffect(() => {
@@ -70,20 +83,30 @@ export default function RootLayout() {
     return cleanup;
   }, [isAuthenticated]);
 
-  // Navigation basierend auf Auth-Status
+  // Navigation basierend auf Auth-Status und Onboarding
   useEffect(() => {
-    if (!mounted || isLoading) return;
+    if (!mounted || isLoading || onboardingLoading) return;
 
     const inAuthGroup = segments[0] === "(auth)";
+    const inOnboarding = segments[0] === "onboarding";
 
     if (!isAuthenticated && !inAuthGroup) {
+      // Not authenticated → redirect to login
       router.replace("/(auth)/login");
     } else if (isAuthenticated && inAuthGroup) {
-      router.replace("/(tabs)/chat");
+      // Authenticated but in auth group → check onboarding
+      if (onboardingComplete === false && !inOnboarding) {
+        router.replace("/onboarding");
+      } else if (onboardingComplete === true) {
+        router.replace("/(tabs)/chat");
+      }
+    } else if (isAuthenticated && onboardingComplete === false && !inOnboarding) {
+      // Authenticated but onboarding incomplete → redirect to onboarding
+      router.replace("/onboarding");
     }
 
     SplashScreen.hideAsync();
-  }, [mounted, isAuthenticated, isLoading, segments]);
+  }, [mounted, isAuthenticated, isLoading, onboardingComplete, onboardingLoading, segments]);
 
   return (
     <QueryClientProvider client={queryClient}>

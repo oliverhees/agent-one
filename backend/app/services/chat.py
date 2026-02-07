@@ -1081,6 +1081,20 @@ class ChatService:
             f"{time_str} Uhr (Europe/Berlin)"
         )
 
+        # 1c. User Profile
+        try:
+            settings_service_temp = SettingsService(self.db)
+            user_settings = await settings_service_temp.get_settings(user_id)
+            display_name = user_settings.display_name or "unbekannt"
+            parts.append(
+                f"## User-Profil\n"
+                f"Name: {display_name}\n\n"
+                f"Du sollst den User mit Namen ansprechen wenn dieser bekannt ist! "
+                f"Das schafft eine persoenliche Verbindung und motiviert."
+            )
+        except Exception:
+            pass
+
         # 2. ADHS Core Competency
         parts.append(
             "## ADHS-Kernkompetenz\n"
@@ -1170,7 +1184,18 @@ class ChatService:
 
         # 8. Tool Usage Rules
         parts.append(
-            "## Tool-Regeln\n"
+            "## KRITISCH: Tool-Nutzung\n"
+            "Du MUSST die Tools IMMER tatsaechlich aufrufen! "
+            "Sag NIEMALS 'Ich habe die Aufgabe als erledigt markiert' oder "
+            "'Ich habe dir XP gegeben' ohne den entsprechenden Tool-Call "
+            "(complete_task, create_task, etc.) TATSAECHLICH auszufuehren. "
+            "Wenn du eine Aktion beschreibst, MUSS der Tool-Call vorher erfolgt sein.\n\n"
+            "### Pflicht-Tools bei Aktionen:\n"
+            "- User sagt Aufgabe erledigt → complete_task aufrufen\n"
+            "- User will neue Aufgabe → create_task aufrufen\n"
+            "- User will Info speichern → create_brain_entry aufrufen\n"
+            "- User fragt nach Fortschritt → get_stats aufrufen\n\n"
+            "### Allgemeine Regeln:\n"
             "1. IMMER zuerst list_tasks pruefen bevor neue Tasks erstellt werden\n"
             "2. Proaktiv Brain nutzen — wichtige Infos automatisch speichern\n"
             "3. Ueberfaellige Tasks? → Sanft nachfragen. Lange offen? → breakdown_task anbieten\n"
@@ -1197,6 +1222,70 @@ class ChatService:
         )
 
         return "\n\n".join(parts)
+
+    async def send_message_simple(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        content: str,
+    ) -> str:
+        """
+        Send a message and get AI response as a simple string (non-streaming).
+
+        This is a simplified version of the streaming flow, used by voice
+        and other contexts where streaming is not needed.
+
+        Args:
+            user_id: User ID
+            conversation_id: Conversation ID
+            content: Message content
+
+        Returns:
+            str: AI response text
+        """
+        # Save user message
+        await self.save_message(
+            conversation_id=conversation_id,
+            role=MessageRole.USER,
+            content=content,
+        )
+
+        # Get conversation history for context
+        messages, _, _ = await self.get_messages(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            limit=10,  # Last 10 messages for context
+        )
+
+        # Build messages array for Claude API
+        api_messages = []
+        for msg in messages:
+            api_messages.append({
+                "role": msg.role.value if msg.role != MessageRole.SYSTEM else "user",
+                "content": msg.content,
+            })
+
+        # Create tool executor bound to current user and DB session
+        tool_executor = await self._create_tool_executor(user_id)
+
+        # Build dynamic system prompt with user context
+        system_prompt = await self._build_system_prompt(user_id)
+
+        # Get full response with tool use
+        response_text = await self.ai_service.get_response_with_tools(
+            messages=api_messages,
+            system_prompt=system_prompt,
+            tool_executor=tool_executor,
+        )
+
+        # Save assistant message
+        await self.save_message(
+            conversation_id=conversation_id,
+            role=MessageRole.ASSISTANT,
+            content=response_text,
+        )
+
+        return response_text
 
     async def stream_ai_response(
         self,
@@ -1254,7 +1343,11 @@ class ChatService:
             tool_executor=tool_executor,
         )
 
-        # Yield word-by-word for SSE streaming effect
-        words = response_text.split()
-        for i, word in enumerate(words):
-            yield word + (" " if i < len(words) - 1 else "")
+        # Yield word-by-word for SSE streaming effect, preserving newlines
+        for line_idx, line in enumerate(response_text.split("\n")):
+            if line_idx > 0:
+                yield "\n"
+            words = line.split(" ")
+            for i, word in enumerate(words):
+                if word:
+                    yield word + (" " if i < len(words) - 1 else "")

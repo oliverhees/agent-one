@@ -15,6 +15,8 @@ from app.api.v1 import (
     nudges,
     dashboard,
     settings,
+    voice,
+    voice_live,
 )
 
 
@@ -35,3 +37,7 @@ router.include_router(task_breakdown.router, prefix="/tasks", tags=["Task Breakd
 router.include_router(nudges.router, prefix="/nudges", tags=["Nudges"])
 router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 router.include_router(settings.router, prefix="/settings", tags=["Settings"])
+
+# Phase 4: Voice routers
+router.include_router(voice.router, prefix="/voice", tags=["Voice"])
+router.include_router(voice_live.router, prefix="/voice", tags=["Voice Live"])

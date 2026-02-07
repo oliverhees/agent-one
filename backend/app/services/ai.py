@@ -1,12 +1,15 @@
 """AI service for interacting with Claude API with tool use."""
 
 import json
+import logging
 from typing import AsyncGenerator
 
 import httpx
 
 from app.core.config import settings
 from app.core.exceptions import AIServiceUnavailableError
+
+logger = logging.getLogger(__name__)
 
 
 # Tool definitions for Claude
@@ -495,13 +498,25 @@ class AIService:
                     stop_reason = result.get("stop_reason")
                     content_blocks = result.get("content", [])
 
+                    logger.info(
+                        "Claude API response: stop_reason=%s, blocks=%d",
+                        stop_reason,
+                        len(content_blocks),
+                    )
+
                     # If Claude finished without requesting tools, extract text
-                    if stop_reason == "end_turn" or stop_reason != "tool_use":
+                    if stop_reason != "tool_use":
                         text_parts = []
                         for block in content_blocks:
                             if block.get("type") == "text":
                                 text_parts.append(block["text"])
-                        return "\n".join(text_parts) or "..."
+                        final_text = "\n".join(text_parts) or "..."
+                        logger.info(
+                            "Claude final response (%d chars, stop=%s)",
+                            len(final_text),
+                            stop_reason,
+                        )
+                        return final_text
 
                     # Handle tool_use: add assistant message, execute tools, add results
                     current_messages.append({
@@ -516,14 +531,30 @@ class AIService:
                             tool_input = block["input"]
                             tool_use_id = block["id"]
 
+                            logger.info(
+                                "Executing tool: %s with input: %s",
+                                tool_name,
+                                json.dumps(tool_input, ensure_ascii=False)[:200],
+                            )
+
                             try:
                                 result_str = await tool_executor(tool_name, tool_input)
+                                logger.info(
+                                    "Tool %s result: %s",
+                                    tool_name,
+                                    result_str[:200],
+                                )
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_use_id,
                                     "content": result_str,
                                 })
                             except Exception as e:
+                                logger.error(
+                                    "Tool %s failed: %s",
+                                    tool_name,
+                                    str(e),
+                                )
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_use_id,

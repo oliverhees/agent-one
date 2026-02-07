@@ -1,7 +1,7 @@
 # API Endpoints
 
-**Version:** 2.0
-**Datum:** 2026-02-06
+**Version:** 2.1
+**Datum:** 2026-02-07
 **Base URL:** `https://api.alice-app.de/api/v1`
 **Dokumentation:** Auto-generiert via FastAPI (Swagger UI unter `/docs`, ReDoc unter `/redoc`)
 
@@ -17,8 +17,9 @@
 6. [Brain Endpoints](#brain-endpoints)
 7. [Personality Endpoints](#personality-endpoints)
 8. [Proactive Endpoints](#proactive-endpoints)
-9. [Fehlercodes](#fehlercodes)
-10. [Zusammenfassung](#zusammenfassung)
+9. [Settings Endpoints](#settings-endpoints)
+10. [Fehlercodes](#fehlercodes)
+11. [Zusammenfassung](#zusammenfassung)
 
 > **Hinweis:** Dieses Dokument spezifiziert die Endpoints fuer **Phase 1 (Foundation)** und **Phase 2 (Core Features)**. Spaetere Phasen werden ergaenzt, wenn die Implementierung ansteht.
 
@@ -2135,6 +2136,310 @@ Snoozet ein Mentioned Item bis zu einem bestimmten Zeitpunkt. Der Status wird au
 
 ---
 
+## Settings Endpoints
+
+Die Settings Endpoints ermöglichen das Verwalten von Benutzereinstellungen, API-Keys und Voice-Provider-Konfiguration.
+
+---
+
+### `GET /api/v1/settings/adhs`
+
+Ruft die ADHS-spezifischen Einstellungen des authentifizierten Benutzers ab.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Response 200 OK:**
+```json
+{
+  "adhs_mode": true,
+  "nudge_intensity": "medium",
+  "auto_breakdown": true,
+  "gamification_enabled": true,
+  "focus_timer_minutes": 25,
+  "quiet_hours_start": "22:00",
+  "quiet_hours_end": "07:00",
+  "preferred_reminder_times": ["09:00", "14:00", "18:00"],
+  "expo_push_token": "ExponentPushToken[xyz...]",
+  "notifications_enabled": true,
+  "display_name": "Max",
+  "onboarding_complete": true
+}
+```
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 403 | `FORBIDDEN` | Kein oder ungueltiger Access Token |
+
+---
+
+### `PUT /api/v1/settings/adhs`
+
+Aktualisiert ADHS-Einstellungen (partial update: nur angegebene Felder werden geaendert).
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Request Body:**
+```json
+{
+  "nudge_intensity": "high",
+  "focus_timer_minutes": 15
+}
+```
+
+**Request Schema:**
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|---|---|---|---|---|
+| `adhs_mode` | `boolean` | Nein | - | ADHS-Modus aktiv? |
+| `nudge_intensity` | `string` | Nein | `low`, `medium`, `high` | Nudge-Intensitaet |
+| `auto_breakdown` | `boolean` | Nein | - | Automatischer Task-Breakdown? |
+| `gamification_enabled` | `boolean` | Nein | - | Gamification aktiv? |
+| `focus_timer_minutes` | `integer` | Nein | 5-120 | Focus-Timer Dauer in Minuten |
+| `quiet_hours_start` | `string` | Nein | HH:MM Format | Ruhezeiten Start |
+| `quiet_hours_end` | `string` | Nein | HH:MM Format | Ruhezeiten Ende |
+| `preferred_reminder_times` | `array[string]` | Nein | HH:MM Format, max 10 | Bevorzugte Erinnerungszeiten |
+| `notifications_enabled` | `boolean` | Nein | - | Push-Benachrichtigungen aktiv? |
+| `display_name` | `string` | Nein | 1-100 Zeichen | Anzeigename |
+
+**Response 200 OK:**
+Gleiche Struktur wie GET (vollstaendiges Settings-Objekt).
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 403 | `FORBIDDEN` | Kein oder ungueltiger Access Token |
+| 422 | `VALIDATION_ERROR` | Ungueltige Werte (z.B. `nudge_intensity: "extreme"`) |
+
+---
+
+### `POST /api/v1/settings/push-token`
+
+Registriert oder aktualisiert das Expo Push Token fuer Push-Benachrichtigungen.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Request Body:**
+```json
+{
+  "expo_push_token": "ExponentPushToken[abc123...]"
+}
+```
+
+**Request Schema:**
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|---|---|---|---|---|
+| `expo_push_token` | `string` | Ja | Min. 10 Zeichen | Expo Push Token |
+
+**Response 204 No Content**
+
+Kein Response Body bei Erfolg.
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 403 | `FORBIDDEN` | Kein oder ungueltiger Access Token |
+| 422 | `VALIDATION_ERROR` | Token zu kurz oder ungueltig |
+
+---
+
+### `POST /api/v1/settings/onboarding`
+
+Schliesst das Onboarding ab und speichert initiale Praeferenzen.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Request Body:**
+```json
+{
+  "display_name": "Max",
+  "focus_timer_minutes": 25,
+  "nudge_intensity": "medium"
+}
+```
+
+**Request Schema:**
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|---|---|---|---|---|
+| `display_name` | `string` | Nein | 1-100 Zeichen | Anzeigename (optional) |
+| `focus_timer_minutes` | `integer` | Nein | 5-120 | Focus-Timer Dauer |
+| `nudge_intensity` | `string` | Nein | `low`, `medium`, `high` | Nudge-Intensitaet |
+
+**Response 200 OK:**
+```json
+{
+  "success": true,
+  "message": "Onboarding abgeschlossen"
+}
+```
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 403 | `FORBIDDEN` | Kein oder ungueltiger Access Token |
+| 422 | `VALIDATION_ERROR` | Ungueltige Werte |
+
+---
+
+### `GET /api/v1/settings/api-keys`
+
+Ruft die gespeicherten API-Keys ab (maskiert, nur letzte 4 Zeichen).
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Response 200 OK:**
+```json
+{
+  "anthropic": "...XXXX",
+  "elevenlabs": "...YYYY",
+  "deepgram": null
+}
+```
+
+**Response Schema:**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `anthropic` | `string` \| `null` | Anthropic API Key (maskiert: `...XXXX`) |
+| `elevenlabs` | `string` \| `null` | ElevenLabs API Key (maskiert: `...XXXX`) |
+| `deepgram` | `string` \| `null` | Deepgram API Key (maskiert: `...XXXX`) |
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 403 | `FORBIDDEN` | Kein oder ungueltiger Access Token |
+
+---
+
+### `PUT /api/v1/settings/api-keys`
+
+Speichert API-Keys (verschluesselt). Nur angegebene Keys werden aktualisiert.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Request Body:**
+```json
+{
+  "anthropic": "sk-ant-api03-xyz...",
+  "elevenlabs": "el_key_abc..."
+}
+```
+
+**Request Schema:**
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|---|---|---|---|---|
+| `anthropic` | `string` | Nein | Min. 1 Zeichen | Anthropic API Key (verschluesselt gespeichert) |
+| `elevenlabs` | `string` | Nein | Min. 1 Zeichen | ElevenLabs API Key (verschluesselt gespeichert) |
+| `deepgram` | `string` | Nein | Min. 1 Zeichen | Deepgram API Key (verschluesselt gespeichert) |
+
+**Response 200 OK:**
+```json
+{
+  "anthropic": "...XXXX",
+  "elevenlabs": "...YYYY",
+  "deepgram": null
+}
+```
+
+Gibt maskierte Keys zurueck (gleiche Struktur wie GET).
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 403 | `FORBIDDEN` | Kein oder ungueltiger Access Token |
+| 422 | `VALIDATION_ERROR` | Leere Strings oder zu kurze Keys |
+
+**Sicherheit:**
+- Keys werden mit Fernet (symmetrische Verschluesselung) gespeichert
+- Key-Ableitung via SHA-256 aus `SECRET_KEY`
+- Nur maskierte Keys (`...XXXX`) werden zurueckgegeben
+
+---
+
+### `GET /api/v1/settings/voice-providers`
+
+Ruft die aktuellen Voice-Provider-Einstellungen ab.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Response 200 OK:**
+```json
+{
+  "stt_provider": "deepgram",
+  "tts_provider": "elevenlabs"
+}
+```
+
+**Response Schema:**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `stt_provider` | `string` | STT Provider (`deepgram`, `whisper`) |
+| `tts_provider` | `string` | TTS Provider (`elevenlabs`, `edge-tts`) |
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 403 | `FORBIDDEN` | Kein oder ungueltiger Access Token |
+
+---
+
+### `PUT /api/v1/settings/voice-providers`
+
+Aktualisiert Voice-Provider-Einstellungen.
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** 60/min
+
+**Request Body:**
+```json
+{
+  "stt_provider": "whisper",
+  "tts_provider": "edge-tts"
+}
+```
+
+**Request Schema:**
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|---|---|---|---|---|
+| `stt_provider` | `string` | Nein | `deepgram`, `whisper` | STT Provider |
+| `tts_provider` | `string` | Nein | `elevenlabs`, `edge-tts` | TTS Provider |
+
+**Response 200 OK:**
+```json
+{
+  "stt_provider": "whisper",
+  "tts_provider": "edge-tts"
+}
+```
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 403 | `FORBIDDEN` | Kein oder ungueltiger Access Token |
+| 422 | `VALIDATION_ERROR` | Ungueltiger Provider-Name |
+
+---
+
 ## Fehlercodes
 
 ### Allgemeine HTTP Status Codes
@@ -2227,19 +2532,24 @@ Snoozet ein Mentioned Item bis zu einem bestimmten Zeitpunkt. Der Status wird au
 | POST | `/api/v1/proactive/mentioned-items/{id}/dismiss` | Item verwerfen | Ja | 60/min |
 | POST | `/api/v1/proactive/mentioned-items/{id}/snooze` | Item snoozen | Ja | 60/min |
 
+### Phase 3: ADHS-Modus Settings & Voice
+
+| Method | Path | Beschreibung | Auth | Rate Limit |
+|---|---|---|---|---|
+| GET | `/api/v1/settings/adhs` | ADHS-Einstellungen abrufen | Ja | 60/min |
+| PUT | `/api/v1/settings/adhs` | ADHS-Einstellungen aktualisieren | Ja | 60/min |
+| POST | `/api/v1/settings/push-token` | Expo Push Token registrieren | Ja | 60/min |
+| POST | `/api/v1/settings/onboarding` | Onboarding abschliessen | Ja | 60/min |
+| GET | `/api/v1/settings/api-keys` | API-Keys abrufen (maskiert) | Ja | 60/min |
+| PUT | `/api/v1/settings/api-keys` | API-Keys speichern (verschluesselt) | Ja | 60/min |
+| GET | `/api/v1/settings/voice-providers` | Voice-Provider-Einstellungen abrufen | Ja | 60/min |
+| PUT | `/api/v1/settings/voice-providers` | Voice-Provider-Einstellungen aktualisieren | Ja | 60/min |
+
 ---
 
-## Geplante Endpoints (Phase 3-4)
+## Geplante Endpoints (Phase 4+)
 
 > Diese Endpoints werden spezifiziert, wenn die jeweilige Phase implementiert wird.
-
-### Phase 3: ADHS-Modus
-
-| Method | Path | Beschreibung |
-|---|---|---|
-| GET | `/api/v1/gamification/stats` | XP, Level, Streak |
-| GET | `/api/v1/gamification/history` | XP-Verlauf |
-| GET | `/api/v1/gamification/achievements` | Achievements auflisten |
 
 ### Phase 4: Plugins & Extras
 
@@ -2254,5 +2564,3 @@ Snoozet ein Mentioned Item bis zu einem bestimmten Zeitpunkt. Der Status wird au
 | POST | `/api/v1/plugins/{id}/webhook` | Plugin Webhook empfangen |
 | GET | `/api/v1/calendar/events` | Kalender-Events abrufen |
 | POST | `/api/v1/calendar/sync` | Kalender-Sync starten |
-| GET | `/api/v1/personality/voice` | Voice-Einstellungen lesen |
-| PUT | `/api/v1/personality/voice` | Voice-Einstellungen aendern |

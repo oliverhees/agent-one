@@ -110,6 +110,60 @@ export default function SettingsScreen() {
           </Card>
         </TouchableOpacity>
 
+        <TouchableOpacity
+          onPress={() => router.push("/(tabs)/settings/api-keys")}
+          accessibilityLabel="API Keys verwalten"
+        >
+          <Card className="mb-4">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center">
+                <Ionicons
+                  name="key-outline"
+                  size={20}
+                  color="#0284c7"
+                  style={{ marginRight: 10 }}
+                />
+                <View>
+                  <Text className="text-lg font-semibold text-gray-900 dark:text-white">
+                    API Keys
+                  </Text>
+                  <Text className="text-sm text-gray-500 dark:text-gray-400">
+                    Eigene API-Schluessel verwalten
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </View>
+          </Card>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => router.push("/(tabs)/settings/voice-providers")}
+          accessibilityLabel="Voice Provider konfigurieren"
+        >
+          <Card className="mb-4">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center">
+                <Ionicons
+                  name="volume-medium-outline"
+                  size={20}
+                  color="#0284c7"
+                  style={{ marginRight: 10 }}
+                />
+                <View>
+                  <Text className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Voice Provider
+                  </Text>
+                  <Text className="text-sm text-gray-500 dark:text-gray-400">
+                    Sprach-Provider konfigurieren
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </View>
+          </Card>
+        </TouchableOpacity>
+
         <Card className="mb-4">
           <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
             App-Version
