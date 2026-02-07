@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   useColorScheme,
+  useWindowDimensions,
   Keyboard,
 } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -76,6 +77,44 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState("");
   const flatListRef = useRef<FlatList>(null);
   const tabBarHeight = useBottomTabBarHeight();
+  const { height: windowHeight } = useWindowDimensions();
+
+  // Android keyboard tracking — robust against edgeToEdge + adjustResize quirks
+  const [androidKeyboardPadding, setAndroidKeyboardPadding] = useState(0);
+  const baseWindowHeight = useRef(windowHeight);
+
+  // Track baseline window height (when keyboard is closed)
+  useEffect(() => {
+    if (androidKeyboardPadding === 0) {
+      baseWindowHeight.current = windowHeight;
+    }
+  }, [windowHeight, androidKeyboardPadding]);
+
+  // On Android: track keyboard height and calculate effective padding
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    const showSub = Keyboard.addListener("keyboardDidShow", (e) => {
+      const kbHeight = e.endCoordinates.height;
+      // adjustResize may have already shrunk the window — account for that
+      const alreadyHandled = baseWindowHeight.current - windowHeight;
+      const needed = Math.max(0, kbHeight - alreadyHandled);
+      setAndroidKeyboardPadding(needed);
+
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    });
+
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+      setAndroidKeyboardPadding(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [windowHeight]);
 
   const {
     messages,
@@ -87,7 +126,7 @@ export default function ChatScreen() {
     clearError,
   } = useChatStore();
 
-  // Scroll to bottom when new messages arrive or keyboard opens
+  // Scroll to bottom when new messages arrive
   useEffect(() => {
     if (messages.length > 0 || streamingContent) {
       setTimeout(() => {
@@ -96,8 +135,9 @@ export default function ChatScreen() {
     }
   }, [messages.length, streamingContent]);
 
-  // Scroll to bottom when keyboard shows
+  // Scroll to bottom when keyboard shows (iOS)
   useEffect(() => {
+    if (Platform.OS !== "ios") return;
     const keyboardDidShow = Keyboard.addListener("keyboardDidShow", () => {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
@@ -180,12 +220,8 @@ export default function ChatScreen() {
     );
   }
 
-  return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      className="flex-1 bg-white dark:bg-gray-900"
-      keyboardVerticalOffset={Platform.OS === "ios" ? tabBarHeight : 0}
-    >
+  const chatContent = (
+    <>
       {/* Error Banner */}
       {error && (
         <View className="bg-red-500 px-4 py-3 flex-row items-center justify-between">
@@ -210,6 +246,7 @@ export default function ChatScreen() {
           onContentSizeChange={() =>
             flatListRef.current?.scrollToEnd({ animated: true })
           }
+          keyboardShouldPersistTaps="handled"
         />
       )}
 
@@ -250,6 +287,29 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       </View>
-    </KeyboardAvoidingView>
+    </>
+  );
+
+  // iOS: KeyboardAvoidingView handles keyboard natively
+  // Android: Manual padding to work around edgeToEdge + adjustResize conflicts
+  if (Platform.OS === "ios") {
+    return (
+      <KeyboardAvoidingView
+        behavior="padding"
+        className="flex-1 bg-white dark:bg-gray-900"
+        keyboardVerticalOffset={tabBarHeight}
+      >
+        {chatContent}
+      </KeyboardAvoidingView>
+    );
+  }
+
+  return (
+    <View
+      className="flex-1 bg-white dark:bg-gray-900"
+      style={{ paddingBottom: androidKeyboardPadding }}
+    >
+      {chatContent}
+    </View>
   );
 }
