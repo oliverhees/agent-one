@@ -50,7 +50,17 @@ class SettingsService:
             quiet_hours_start=merged["quiet_hours_start"],
             quiet_hours_end=merged["quiet_hours_end"],
             preferred_reminder_times=merged["preferred_reminder_times"],
+            expo_push_token=merged.get("expo_push_token"),
+            notifications_enabled=merged.get("notifications_enabled", True),
         )
+
+    async def register_push_token(self, user_id: UUID, token: str) -> None:
+        """Store an Expo push token in the user's settings JSONB blob."""
+        user_settings = await self._get_or_create_settings(user_id)
+        current = {**DEFAULT_SETTINGS, **user_settings.settings}
+        current["expo_push_token"] = token
+        user_settings.settings = current
+        await self.db.flush()
 
     async def update_settings(self, user_id: UUID, data: ADHSSettingsUpdate) -> ADHSSettingsResponse:
         """Partial update of ADHS settings."""
@@ -78,4 +88,6 @@ class SettingsService:
             quiet_hours_start=current_settings["quiet_hours_start"],
             quiet_hours_end=current_settings["quiet_hours_end"],
             preferred_reminder_times=current_settings["preferred_reminder_times"],
+            expo_push_token=current_settings.get("expo_push_token"),
+            notifications_enabled=current_settings.get("notifications_enabled", True),
         )

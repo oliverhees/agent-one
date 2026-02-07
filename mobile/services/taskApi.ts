@@ -11,38 +11,38 @@ import {
 
 export const taskApi = {
   create: async (data: TaskCreate): Promise<Task> => {
-    const response = await api.post<Task>("/api/v1/tasks", data);
+    const response = await api.post<Task>("/tasks", data);
     return response.data;
   },
 
   list: async (params?: TaskListParams): Promise<TaskListResponse> => {
-    const response = await api.get<TaskListResponse>("/api/v1/tasks", { params });
+    const response = await api.get<TaskListResponse>("/tasks", { params });
     return response.data;
   },
 
   get: async (id: string): Promise<Task> => {
-    const response = await api.get<Task>(`/api/v1/tasks/${id}`);
+    const response = await api.get<Task>(`/tasks/${id}`);
     return response.data;
   },
 
   update: async (id: string, data: TaskUpdate): Promise<Task> => {
-    const response = await api.put<Task>(`/api/v1/tasks/${id}`, data);
+    const response = await api.put<Task>(`/tasks/${id}`, data);
     return response.data;
   },
 
   delete: async (id: string): Promise<void> => {
-    await api.delete(`/api/v1/tasks/${id}`);
+    await api.delete(`/tasks/${id}`);
   },
 
   complete: async (id: string): Promise<TaskCompleteResponse> => {
     const response = await api.post<TaskCompleteResponse>(
-      `/api/v1/tasks/${id}/complete`
+      `/tasks/${id}/complete`
     );
     return response.data;
   },
 
   today: async (): Promise<TaskTodayResponse> => {
-    const response = await api.get<TaskTodayResponse>("/api/v1/tasks/today");
+    const response = await api.get<TaskTodayResponse>("/tasks/today");
     return response.data;
   },
 };

@@ -1,5 +1,6 @@
 """Main FastAPI application entry point."""
 
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,10 +28,26 @@ async def lifespan(app: FastAPI):
     await init_db()
     print("Database connection initialized")
 
+    # Start background scheduler (skip in test environment)
+    scheduler_task = None
+    if settings.app_env != "test":
+        from app.services.scheduler import run_scheduler
+        scheduler_task = asyncio.create_task(run_scheduler())
+        print("Background scheduler started")
+
     yield
 
     # Shutdown
     print("Shutting down...")
+
+    if scheduler_task is not None:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
+        print("Background scheduler stopped")
+
     await close_db()
     print("Database connection closed")
 

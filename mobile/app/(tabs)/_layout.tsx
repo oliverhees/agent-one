@@ -8,6 +8,7 @@ export default function TabsLayout() {
         headerShown: true,
         tabBarActiveTintColor: "#0284c7",
         tabBarInactiveTintColor: "#9ca3af",
+        tabBarHideOnKeyboard: true,
         tabBarStyle: {
           backgroundColor: "#ffffff",
           borderTopColor: "#e5e7eb",

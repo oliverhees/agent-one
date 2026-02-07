@@ -127,7 +127,7 @@ async def delete_entry(
 
 @router.get(
     "/search",
-    response_model=list[BrainSearchResult],
+    response_model=dict,
     status_code=status.HTTP_200_OK,
     summary="Search brain entries",
     dependencies=[Depends(standard_rate_limit)],
@@ -141,9 +141,14 @@ async def search_entries(
 ):
     """Search brain entries by text content."""
     service = BrainService(db)
-    return await service.search(
+    results = await service.search(
         user_id=current_user.id,
         query=q,
         limit=limit,
         min_score=min_score,
     )
+    return {
+        "results": results,
+        "query": q,
+        "total_results": len(results),
+    }

@@ -19,6 +19,8 @@ class ADHSSettingsResponse(BaseModel):
     quiet_hours_start: str = Field(..., description="Quiet hours start (HH:MM)")
     quiet_hours_end: str = Field(..., description="Quiet hours end (HH:MM)")
     preferred_reminder_times: list[str] = Field(..., description="Preferred reminder times (HH:MM)")
+    expo_push_token: str | None = Field(None, description="Expo push notification token")
+    notifications_enabled: bool = Field(..., description="Push notifications enabled?")
 
 
 class ADHSSettingsUpdate(BaseModel):
@@ -32,6 +34,7 @@ class ADHSSettingsUpdate(BaseModel):
     quiet_hours_start: str | None = Field(None, description="Quiet hours start (HH:MM)")
     quiet_hours_end: str | None = Field(None, description="Quiet hours end (HH:MM)")
     preferred_reminder_times: list[str] | None = Field(None, max_length=10, description="Preferred reminder times")
+    notifications_enabled: bool | None = Field(None, description="Push notifications on/off")
 
     @field_validator("nudge_intensity")
     @classmethod

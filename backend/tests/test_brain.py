@@ -280,10 +280,12 @@ class TestSearchBrain:
 
         assert response.status_code == 200
         data = response.json()
-        assert isinstance(data, list)
-        assert len(data) >= 1
-        assert data[0]["entry"]["title"] == "Python Tutorial"
-        assert data[0]["score"] > 0
+        assert isinstance(data, dict)
+        assert data["query"] == "Python"
+        assert data["total_results"] >= 1
+        assert len(data["results"]) >= 1
+        assert data["results"][0]["entry"]["title"] == "Python Tutorial"
+        assert data["results"][0]["score"] > 0
 
     async def test_search_brain_no_results(self, authenticated_client: AsyncClient, test_user):
         """Test search with no matching results."""
@@ -296,8 +298,9 @@ class TestSearchBrain:
 
         assert response.status_code == 200
         data = response.json()
-        assert isinstance(data, list)
-        assert len(data) == 0
+        assert isinstance(data, dict)
+        assert data["total_results"] == 0
+        assert len(data["results"]) == 0
 
     async def test_search_brain_content_match(self, authenticated_client: AsyncClient, test_user):
         """Test that search also matches content, not just title."""
@@ -310,7 +313,8 @@ class TestSearchBrain:
 
         assert response.status_code == 200
         data = response.json()
-        assert len(data) >= 1
+        assert data["total_results"] >= 1
+        assert len(data["results"]) >= 1
 
 
 class TestBrainAuth:

@@ -12,7 +12,7 @@ export const personalityApi = {
     data: PersonalityProfileCreate
   ): Promise<PersonalityProfile> => {
     const response = await api.post<PersonalityProfile>(
-      "/api/v1/personality/profiles",
+      "/personality/profiles",
       data
     );
     return response.data;
@@ -20,7 +20,7 @@ export const personalityApi = {
 
   listProfiles: async (): Promise<PersonalityProfileListResponse> => {
     const response = await api.get<PersonalityProfileListResponse>(
-      "/api/v1/personality/profiles"
+      "/personality/profiles"
     );
     return response.data;
   },
@@ -30,26 +30,26 @@ export const personalityApi = {
     data: PersonalityProfileUpdate
   ): Promise<PersonalityProfile> => {
     const response = await api.put<PersonalityProfile>(
-      `/api/v1/personality/profiles/${id}`,
+      `/personality/profiles/${id}`,
       data
     );
     return response.data;
   },
 
   deleteProfile: async (id: string): Promise<void> => {
-    await api.delete(`/api/v1/personality/profiles/${id}`);
+    await api.delete(`/personality/profiles/${id}`);
   },
 
   activateProfile: async (id: string): Promise<PersonalityProfile> => {
     const response = await api.post<PersonalityProfile>(
-      `/api/v1/personality/profiles/${id}/activate`
+      `/personality/profiles/${id}/activate`
     );
     return response.data;
   },
 
   listTemplates: async (): Promise<PersonalityTemplateListResponse> => {
     const response = await api.get<PersonalityTemplateListResponse>(
-      "/api/v1/personality/templates"
+      "/personality/templates"
     );
     return response.data;
   },

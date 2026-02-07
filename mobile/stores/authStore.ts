@@ -43,8 +43,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await setSecure(STORAGE_KEYS.ACCESS_TOKEN, response.access_token);
       await setSecure(STORAGE_KEYS.REFRESH_TOKEN, response.refresh_token);
 
+      // Backend returns only tokens, fetch user data separately
+      const user = await authService.getMe();
+
       set({
-        user: response.user,
+        user,
         accessToken: response.access_token,
         refreshToken: response.refresh_token,
         isAuthenticated: true,
@@ -52,10 +55,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
     } catch (error: any) {
       const errorMessage =
-        error.response?.data?.message ||
+        error.response?.data?.detail ||
+        error.message ||
         "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihre Eingaben.";
       set({
-        error: errorMessage,
+        error: typeof errorMessage === "string" ? errorMessage : JSON.stringify(errorMessage),
         isLoading: false,
         isAuthenticated: false,
       });
@@ -75,8 +79,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await setSecure(STORAGE_KEYS.ACCESS_TOKEN, response.access_token);
       await setSecure(STORAGE_KEYS.REFRESH_TOKEN, response.refresh_token);
 
+      // Backend returns only tokens, fetch user data separately
+      const user = await authService.getMe();
+
       set({
-        user: response.user,
+        user,
         accessToken: response.access_token,
         refreshToken: response.refresh_token,
         isAuthenticated: true,
@@ -84,10 +91,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
     } catch (error: any) {
       const errorMessage =
-        error.response?.data?.message ||
+        error.response?.data?.detail ||
+        error.message ||
         "Registrierung fehlgeschlagen. Bitte versuchen Sie es erneut.";
       set({
-        error: errorMessage,
+        error: typeof errorMessage === "string" ? errorMessage : JSON.stringify(errorMessage),
         isLoading: false,
         isAuthenticated: false,
       });

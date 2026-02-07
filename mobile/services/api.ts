@@ -1,7 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import config from "../constants/config";
 import { getSecure, setSecure, STORAGE_KEYS } from "../utils/storage";
-import { refreshToken as refreshTokenService } from "./auth";
 
 const api = axios.create({
   baseURL: config.apiUrl,
@@ -42,16 +41,18 @@ api.interceptors.response.use(
           throw new Error("No refresh token available");
         }
 
-        // Refresh token
-        const response = await refreshTokenService(refreshTokenValue);
+        // Refresh token (inline to avoid circular import with auth.ts)
+        const response = await axios.post(`${config.apiUrl}/auth/refresh`, {
+          refresh_token: refreshTokenValue,
+        });
 
         // Update stored tokens
-        await setSecure(STORAGE_KEYS.ACCESS_TOKEN, response.access_token);
-        await setSecure(STORAGE_KEYS.REFRESH_TOKEN, response.refresh_token);
+        await setSecure(STORAGE_KEYS.ACCESS_TOKEN, response.data.access_token);
+        await setSecure(STORAGE_KEYS.REFRESH_TOKEN, response.data.refresh_token);
 
         // Retry original request with new token
         if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${response.access_token}`;
+          originalRequest.headers.Authorization = `Bearer ${response.data.access_token}`;
         }
         return api(originalRequest);
       } catch (refreshError) {

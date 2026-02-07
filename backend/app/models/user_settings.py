@@ -22,6 +22,8 @@ DEFAULT_SETTINGS = {
     "quiet_hours_start": "22:00",
     "quiet_hours_end": "07:00",
     "preferred_reminder_times": ["09:00", "14:00", "18:00"],
+    "expo_push_token": None,
+    "notifications_enabled": True,
 }
 
 
