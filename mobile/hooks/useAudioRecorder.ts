@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback } from "react";
 import { Audio } from "expo-av";
 
+const MIN_RECORDING_MS = 600; // Minimum recording duration to get valid audio
+
 interface UseAudioRecorderReturn {
   isRecording: boolean;
   recordingDuration: number;
@@ -14,9 +16,22 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number>(0);
 
   const startRecording = useCallback(async () => {
     try {
+      // Clean up any previous recording first
+      if (recordingRef.current) {
+        try {
+          await recordingRef.current.stopAndUnloadAsync();
+        } catch {}
+        recordingRef.current = null;
+      }
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) return;
 
@@ -29,6 +44,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
       recordingRef.current = recording;
+      startTimeRef.current = Date.now();
       setIsRecording(true);
       setRecordingDuration(0);
 
@@ -45,6 +61,13 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
     if (!recordingRef.current) return null;
 
     try {
+      // Ensure minimum recording duration for valid audio data
+      const elapsed = Date.now() - startTimeRef.current;
+      if (elapsed < MIN_RECORDING_MS) {
+        const remaining = MIN_RECORDING_MS - elapsed;
+        await new Promise((resolve) => setTimeout(resolve, remaining));
+      }
+
       if (timerRef.current) clearInterval(timerRef.current);
 
       await recordingRef.current.stopAndUnloadAsync();
@@ -57,7 +80,9 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
       return uri;
     } catch (error) {
       console.error("Failed to stop recording:", error);
+      recordingRef.current = null;
       setIsRecording(false);
+      setRecordingDuration(0);
       return null;
     }
   }, []);

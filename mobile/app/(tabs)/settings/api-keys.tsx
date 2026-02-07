@@ -15,20 +15,32 @@ import api from "../../../services/api";
 
 interface ApiKeys {
   anthropic: string | null;
+  openai: string | null;
   elevenlabs: string | null;
   deepgram: string | null;
   system_anthropic_active: boolean;
 }
 
+interface VoiceProviders {
+  stt_provider: "deepgram" | "whisper";
+  tts_provider: "elevenlabs" | "edge-tts";
+}
+
 export default function ApiKeysScreen() {
   const [keys, setKeys] = useState<ApiKeys>({
     anthropic: null,
+    openai: null,
     elevenlabs: null,
     deepgram: null,
     system_anthropic_active: false,
   });
+  const [providers, setProviders] = useState<VoiceProviders>({
+    stt_provider: "deepgram",
+    tts_provider: "elevenlabs",
+  });
   const [inputValues, setInputValues] = useState({
     anthropic: "",
+    openai: "",
     elevenlabs: "",
     deepgram: "",
   });
@@ -37,16 +49,20 @@ export default function ApiKeysScreen() {
   const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
-    loadApiKeys();
+    loadData();
   }, []);
 
-  const loadApiKeys = async () => {
+  const loadData = async () => {
     try {
-      const response = await api.get<ApiKeys>("/api/v1/settings/api-keys");
-      setKeys(response.data);
-      setIsLoading(false);
+      const [keysRes, provRes] = await Promise.all([
+        api.get<ApiKeys>("/settings/api-keys"),
+        api.get<VoiceProviders>("/settings/voice-providers"),
+      ]);
+      setKeys(keysRes.data);
+      setProviders(provRes.data);
     } catch (error) {
-      console.error("Failed to load API keys:", error);
+      console.error("Failed to load settings:", error);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -56,9 +72,11 @@ export default function ApiKeysScreen() {
     try {
       const payload: Partial<Record<keyof ApiKeys, string>> = {};
 
-      // Only send keys that were changed/entered
       if (inputValues.anthropic.trim()) {
         payload.anthropic = inputValues.anthropic.trim();
+      }
+      if (inputValues.openai.trim()) {
+        payload.openai = inputValues.openai.trim();
       }
       if (inputValues.elevenlabs.trim()) {
         payload.elevenlabs = inputValues.elevenlabs.trim();
@@ -67,19 +85,16 @@ export default function ApiKeysScreen() {
         payload.deepgram = inputValues.deepgram.trim();
       }
 
-      await api.put("/api/v1/settings/api-keys", payload);
+      await api.put("/settings/api-keys", payload);
+      await loadData();
 
-      // Reload to get masked keys
-      await loadApiKeys();
-
-      // Clear input fields
       setInputValues({
         anthropic: "",
+        openai: "",
         elevenlabs: "",
         deepgram: "",
       });
 
-      // Show success message
       setSuccessMessage("Gespeichert!");
       setTimeout(() => setSuccessMessage(""), 2000);
     } catch (error) {
@@ -89,6 +104,23 @@ export default function ApiKeysScreen() {
     }
   };
 
+  // Helper: active provider badge
+  const ActiveBadge = () => (
+    <View style={{ backgroundColor: "#dbeafe", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, marginLeft: 8 }}>
+      <Text style={{ color: "#1d4ed8", fontSize: 11, fontWeight: "600" }}>AKTIV</Text>
+    </View>
+  );
+
+  // Helper: missing key warning
+  const MissingKeyWarning = ({ provider }: { provider: string }) => (
+    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8, backgroundColor: "#fef3c7", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}>
+      <Ionicons name="warning" size={16} color="#d97706" style={{ marginRight: 6 }} />
+      <Text style={{ color: "#92400e", fontSize: 13, flex: 1 }}>
+        {provider} ist als aktiver Provider eingestellt, aber kein Key hinterlegt.
+      </Text>
+    </View>
+  );
+
   if (isLoading) {
     return (
       <View className="flex-1 bg-gray-50 dark:bg-gray-900 items-center justify-center">
@@ -96,6 +128,10 @@ export default function ApiKeysScreen() {
       </View>
     );
   }
+
+  const sttIsWhisper = providers.stt_provider === "whisper";
+  const sttIsDeepgram = providers.stt_provider === "deepgram";
+  const ttsIsElevenlabs = providers.tts_provider === "elevenlabs";
 
   return (
     <View className="flex-1 bg-gray-50 dark:bg-gray-900">
@@ -154,9 +190,47 @@ export default function ApiKeysScreen() {
             )}
           </Card>
 
+          {/* OpenAI Card (for Whisper STT) */}
+          <Card className="mb-4">
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
+              <Ionicons
+                name="chatbubble-ellipses-outline"
+                size={24}
+                color="#0284c7"
+                style={{ marginRight: 10 }}
+              />
+              <Text className="text-lg font-semibold text-gray-900 dark:text-white">
+                OpenAI (Whisper STT)
+              </Text>
+              {sttIsWhisper && <ActiveBadge />}
+            </View>
+            <Text className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+              Fuer Sprache-zu-Text mit Whisper
+            </Text>
+            <TextInput
+              className="bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white px-4 py-3 rounded-lg"
+              placeholder={
+                keys.openai
+                  ? `Gespeichert: ${keys.openai}`
+                  : "API Key eingeben"
+              }
+              placeholderTextColor="#9ca3af"
+              value={inputValues.openai}
+              onChangeText={(text) =>
+                setInputValues({ ...inputValues, openai: text })
+              }
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {sttIsWhisper && !keys.openai && !inputValues.openai.trim() && (
+              <MissingKeyWarning provider="Whisper" />
+            )}
+          </Card>
+
           {/* ElevenLabs Card */}
           <Card className="mb-4">
-            <View className="flex-row items-center mb-3">
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
               <Ionicons
                 name="mic-outline"
                 size={24}
@@ -164,9 +238,13 @@ export default function ApiKeysScreen() {
                 style={{ marginRight: 10 }}
               />
               <Text className="text-lg font-semibold text-gray-900 dark:text-white">
-                ElevenLabs
+                ElevenLabs (TTS)
               </Text>
+              {ttsIsElevenlabs && <ActiveBadge />}
             </View>
+            <Text className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+              Fuer Text-zu-Sprache (Premium-Stimmen). Ohne Key wird Edge-TTS (kostenlos) genutzt.
+            </Text>
             <TextInput
               className="bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white px-4 py-3 rounded-lg"
               placeholder={
@@ -187,7 +265,7 @@ export default function ApiKeysScreen() {
 
           {/* Deepgram Card */}
           <Card className="mb-4">
-            <View className="flex-row items-center mb-3">
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
               <Ionicons
                 name="ear-outline"
                 size={24}
@@ -195,9 +273,13 @@ export default function ApiKeysScreen() {
                 style={{ marginRight: 10 }}
               />
               <Text className="text-lg font-semibold text-gray-900 dark:text-white">
-                Deepgram
+                Deepgram (STT)
               </Text>
+              {sttIsDeepgram && <ActiveBadge />}
             </View>
+            <Text className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+              Fuer Sprache-zu-Text (Standard STT Provider)
+            </Text>
             <TextInput
               className="bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white px-4 py-3 rounded-lg"
               placeholder={
@@ -214,6 +296,9 @@ export default function ApiKeysScreen() {
               autoCapitalize="none"
               autoCorrect={false}
             />
+            {sttIsDeepgram && !keys.deepgram && !inputValues.deepgram.trim() && (
+              <MissingKeyWarning provider="Deepgram" />
+            )}
           </Card>
 
           {/* Success Message */}

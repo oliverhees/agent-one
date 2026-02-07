@@ -173,7 +173,7 @@ class SettingsService:
 
         # Decrypt and mask
         masked = {}
-        for provider in ("anthropic", "elevenlabs", "deepgram"):
+        for provider in ("anthropic", "openai", "elevenlabs", "deepgram"):
             encrypted = encrypted_keys.get(provider)
             if encrypted:
                 try:
@@ -191,6 +191,7 @@ class SettingsService:
 
         return ApiKeyResponse(
             anthropic=masked["anthropic"],
+            openai=masked["openai"],
             elevenlabs=masked["elevenlabs"],
             deepgram=masked["deepgram"],
             system_anthropic_active=system_anthropic_active,

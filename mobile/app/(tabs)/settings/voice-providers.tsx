@@ -16,27 +16,41 @@ interface VoiceProviders {
   tts_provider: "elevenlabs" | "edge-tts";
 }
 
+interface ApiKeys {
+  openai: string | null;
+  deepgram: string | null;
+  elevenlabs: string | null;
+  [key: string]: string | null | boolean;
+}
+
 export default function VoiceProvidersScreen() {
   const [providers, setProviders] = useState<VoiceProviders>({
     stt_provider: "deepgram",
     tts_provider: "elevenlabs",
   });
+  const [keys, setKeys] = useState<ApiKeys>({
+    openai: null,
+    deepgram: null,
+    elevenlabs: null,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    loadProviders();
+    loadData();
   }, []);
 
-  const loadProviders = async () => {
+  const loadData = async () => {
     try {
-      const response = await api.get<VoiceProviders>(
-        "/api/v1/settings/voice-providers"
-      );
-      setProviders(response.data);
-      setIsLoading(false);
+      const [provRes, keysRes] = await Promise.all([
+        api.get<VoiceProviders>("/settings/voice-providers"),
+        api.get<ApiKeys>("/settings/api-keys"),
+      ]);
+      setProviders(provRes.data);
+      setKeys(keysRes.data);
     } catch (error) {
       console.error("Failed to load voice providers:", error);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -47,7 +61,7 @@ export default function VoiceProvidersScreen() {
   ) => {
     setIsSaving(true);
     try {
-      await api.put("/api/v1/settings/voice-providers", {
+      await api.put("/settings/voice-providers", {
         [key]: value,
       });
 
@@ -66,6 +80,12 @@ export default function VoiceProvidersScreen() {
       </View>
     );
   }
+
+  // Check if required keys are present
+  const sttKeyMissing =
+    (providers.stt_provider === "whisper" && !keys.openai) ||
+    (providers.stt_provider === "deepgram" && !keys.deepgram);
+  const sttKeyName = providers.stt_provider === "whisper" ? "OpenAI" : "Deepgram";
 
   return (
     <View className="flex-1 bg-gray-50 dark:bg-gray-900">
@@ -108,9 +128,14 @@ export default function VoiceProvidersScreen() {
                   <View className="w-3 h-3 rounded-full bg-primary-600" />
                 )}
               </View>
-              <Text className="text-base text-gray-900 dark:text-white">
-                Deepgram
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text className="text-base text-gray-900 dark:text-white">
+                  Deepgram
+                </Text>
+                <Text className="text-xs text-gray-500 dark:text-gray-400">
+                  Benoetigt Deepgram API Key
+                </Text>
+              </View>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -130,10 +155,29 @@ export default function VoiceProvidersScreen() {
                   <View className="w-3 h-3 rounded-full bg-primary-600" />
                 )}
               </View>
-              <Text className="text-base text-gray-900 dark:text-white">
-                Whisper
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text className="text-base text-gray-900 dark:text-white">
+                  Whisper (OpenAI)
+                </Text>
+                <Text className="text-xs text-gray-500 dark:text-gray-400">
+                  Benoetigt OpenAI API Key
+                </Text>
+              </View>
             </TouchableOpacity>
+
+            {/* Warning if key missing */}
+            {sttKeyMissing && (
+              <TouchableOpacity
+                onPress={() => router.push("/(tabs)/settings/api-keys")}
+                style={{ flexDirection: "row", alignItems: "center", marginTop: 12, backgroundColor: "#fef3c7", paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 }}
+              >
+                <Ionicons name="warning" size={16} color="#d97706" style={{ marginRight: 8 }} />
+                <Text style={{ color: "#92400e", fontSize: 13, flex: 1 }}>
+                  Kein {sttKeyName} Key hinterlegt. Tippe hier um einen einzugeben.
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color="#d97706" />
+              </TouchableOpacity>
+            )}
           </Card>
 
           {/* TTS Provider Card */}
@@ -159,9 +203,14 @@ export default function VoiceProvidersScreen() {
                   <View className="w-3 h-3 rounded-full bg-primary-600" />
                 )}
               </View>
-              <Text className="text-base text-gray-900 dark:text-white">
-                ElevenLabs
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text className="text-base text-gray-900 dark:text-white">
+                  ElevenLabs
+                </Text>
+                <Text className="text-xs text-gray-500 dark:text-gray-400">
+                  Premium-Stimmen, benoetigt ElevenLabs Key. Ohne Key wird Edge-TTS genutzt.
+                </Text>
+              </View>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -181,9 +230,14 @@ export default function VoiceProvidersScreen() {
                   <View className="w-3 h-3 rounded-full bg-primary-600" />
                 )}
               </View>
-              <Text className="text-base text-gray-900 dark:text-white">
-                Edge-TTS (kostenlos)
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text className="text-base text-gray-900 dark:text-white">
+                  Edge-TTS (kostenlos)
+                </Text>
+                <Text className="text-xs text-gray-500 dark:text-gray-400">
+                  Kein API Key erforderlich
+                </Text>
+              </View>
             </TouchableOpacity>
           </Card>
 

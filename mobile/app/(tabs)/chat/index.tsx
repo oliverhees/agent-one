@@ -350,10 +350,9 @@ export default function ChatScreen() {
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          {/* Mic Button */}
+          {/* Mic Button — toggle: tap to start, tap to stop */}
           <TouchableOpacity
-            onPressIn={startRecording}
-            onPressOut={handleVoiceSend}
+            onPress={isRecording ? handleVoiceSend : startRecording}
             disabled={isStreaming || isTranscribing}
             style={{
               width: 48,
@@ -363,7 +362,7 @@ export default function ChatScreen() {
               justifyContent: "center",
               backgroundColor: isRecording ? "#dc2626" : isTranscribing ? "#d1d5db" : isDark ? "#1f2937" : "#f3f4f6",
             }}
-            accessibilityLabel="Sprachnachricht aufnehmen"
+            accessibilityLabel={isRecording ? "Aufnahme stoppen" : "Sprachnachricht aufnehmen"}
           >
             {isTranscribing ? (
               <ActivityIndicator size="small" color="#0284c7" />

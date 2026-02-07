@@ -6,20 +6,13 @@ import {
   ScrollView,
   useColorScheme,
   StatusBar,
+  Animated,
+  Easing,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withRepeat,
-  withTiming,
-  withSequence,
-  Easing,
-  cancelAnimation,
-} from "react-native-reanimated";
 import { Audio } from "expo-av";
+import * as FileSystem from "expo-file-system";
 import { useAuthStore } from "../../../stores/authStore";
 import api from "../../../services/api";
 
@@ -32,12 +25,10 @@ interface TranscriptEntry {
 }
 
 export default function LiveConversationScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-
   const [status, setStatus] = useState<SessionStatus>("connecting");
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const isRecordingRef = useRef(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
@@ -46,90 +37,103 @@ export default function LiveConversationScreen() {
   // Auth token for WebSocket
   const token = useAuthStore((s) => s.accessToken);
 
-  // Orb animation values
-  const orbScale = useSharedValue(1);
-  const orbOpacity = useSharedValue(0.8);
-  const pulseScale = useSharedValue(1);
-  const ringRotation = useSharedValue(0);
+  // Animated values (React Native built-in Animated API)
+  const orbScale = useRef(new Animated.Value(1)).current;
+  const orbOpacity = useRef(new Animated.Value(0.8)).current;
+  const pulseScale = useRef(new Animated.Value(1)).current;
+  const pulseOpacity = useRef(new Animated.Value(0)).current;
+  const ringRotation = useRef(new Animated.Value(0)).current;
 
-  // Animated styles for the orb
-  const orbAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: orbScale.value }],
-    opacity: orbOpacity.value,
-  }));
+  // Track running animations for cleanup
+  const animationsRef = useRef<Animated.CompositeAnimation[]>([]);
 
-  const pulseAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pulseScale.value }],
-    opacity: 1 - (pulseScale.value - 1) * 2, // Fade out as it grows
-  }));
-
-  const ringAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${ringRotation.value}deg` }],
-  }));
+  const stopAnimations = () => {
+    animationsRef.current.forEach(a => a.stop());
+    animationsRef.current = [];
+  };
 
   // Update orb animation based on status
   useEffect(() => {
-    cancelAnimation(orbScale);
-    cancelAnimation(pulseScale);
-    cancelAnimation(ringRotation);
+    stopAnimations();
+    orbScale.setValue(1);
+    pulseScale.setValue(1);
+    pulseOpacity.setValue(0);
+    ringRotation.setValue(0);
 
     switch (status) {
-      case "listening":
+      case "listening": {
         // Gentle breathing animation
-        orbScale.value = withRepeat(
-          withSequence(
-            withTiming(1.05, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-            withTiming(1.0, { duration: 2000, easing: Easing.inOut(Easing.ease) })
-          ),
-          -1
+        const breathe = Animated.loop(
+          Animated.sequence([
+            Animated.timing(orbScale, { toValue: 1.05, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+            Animated.timing(orbScale, { toValue: 1.0, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          ])
         );
         // Slow ring rotation
-        ringRotation.value = withRepeat(
-          withTiming(360, { duration: 8000, easing: Easing.linear }),
-          -1
+        const rotate = Animated.loop(
+          Animated.timing(ringRotation, { toValue: 1, duration: 8000, easing: Easing.linear, useNativeDriver: true })
         );
+        animationsRef.current = [breathe, rotate];
+        breathe.start();
+        rotate.start();
         break;
-
-      case "thinking":
+      }
+      case "thinking": {
         // Fast pulsing
-        orbScale.value = withRepeat(
-          withSequence(
-            withTiming(1.15, { duration: 300, easing: Easing.inOut(Easing.ease) }),
-            withTiming(0.95, { duration: 300, easing: Easing.inOut(Easing.ease) })
-          ),
-          -1
+        const pulse = Animated.loop(
+          Animated.sequence([
+            Animated.timing(orbScale, { toValue: 1.15, duration: 300, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+            Animated.timing(orbScale, { toValue: 0.95, duration: 300, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          ])
         );
         // Fast ring rotation
-        ringRotation.value = withRepeat(
-          withTiming(360, { duration: 2000, easing: Easing.linear }),
-          -1
+        const rotate = Animated.loop(
+          Animated.timing(ringRotation, { toValue: 1, duration: 2000, easing: Easing.linear, useNativeDriver: true })
         );
+        animationsRef.current = [pulse, rotate];
+        pulse.start();
+        rotate.start();
         break;
-
-      case "speaking":
+      }
+      case "speaking": {
         // Active speaking animation
-        orbScale.value = withRepeat(
-          withSequence(
-            withTiming(1.2, { duration: 200, easing: Easing.out(Easing.ease) }),
-            withTiming(1.0, { duration: 400, easing: Easing.inOut(Easing.ease) })
-          ),
-          -1
+        const speak = Animated.loop(
+          Animated.sequence([
+            Animated.timing(orbScale, { toValue: 1.2, duration: 200, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+            Animated.timing(orbScale, { toValue: 1.0, duration: 400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          ])
         );
-        // Pulse ring
-        pulseScale.value = withRepeat(
-          withSequence(
-            withTiming(1.0, { duration: 0 }),
-            withTiming(1.5, { duration: 800, easing: Easing.out(Easing.ease) })
-          ),
-          -1
+        // Pulse ring expanding outward
+        const pulseRing = Animated.loop(
+          Animated.parallel([
+            Animated.sequence([
+              Animated.timing(pulseScale, { toValue: 1.0, duration: 0, useNativeDriver: true }),
+              Animated.timing(pulseScale, { toValue: 1.5, duration: 800, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+            ]),
+            Animated.sequence([
+              Animated.timing(pulseOpacity, { toValue: 0.6, duration: 0, useNativeDriver: true }),
+              Animated.timing(pulseOpacity, { toValue: 0, duration: 800, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+            ]),
+          ])
         );
+        animationsRef.current = [speak, pulseRing];
+        speak.start();
+        pulseRing.start();
         break;
-
+      }
       default:
-        orbScale.value = withTiming(1);
+        Animated.timing(orbScale, { toValue: 1, duration: 300, useNativeDriver: true }).start();
         break;
     }
+
+    return () => stopAnimations();
   }, [status]);
+
+  // Interpolate ring rotation to degrees
+  const ringRotationDeg = ringRotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
 
   // Scroll transcript to bottom
   useEffect(() => {
@@ -146,7 +150,6 @@ export default function LiveConversationScreen() {
     }
 
     try {
-      // Get base URL from api instance
       const baseUrl = api.defaults.baseURL || "http://localhost:8000/api/v1";
       const wsUrl = baseUrl.replace(/^http/, "ws").replace(/\/api\/v1$/, "") + "/api/v1/voice/live?token=" + token;
 
@@ -158,12 +161,10 @@ export default function LiveConversationScreen() {
         startContinuousRecording();
       };
 
-      ws.onmessage = async (event) => {
+      ws.onmessage = async (event: MessageEvent) => {
         if (typeof event.data === "string") {
-          // JSON message
           try {
             const msg = JSON.parse(event.data);
-
             if (msg.type === "status") {
               setStatus(msg.status as SessionStatus);
             } else if (msg.type === "transcript") {
@@ -179,7 +180,6 @@ export default function LiveConversationScreen() {
             console.error("Failed to parse WS message:", e);
           }
         } else if (event.data instanceof Blob) {
-          // Binary audio data - play it
           try {
             const arrayBuffer = await event.data.arrayBuffer();
             await playAudioResponse(arrayBuffer);
@@ -189,8 +189,7 @@ export default function LiveConversationScreen() {
         }
       };
 
-      ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
+      ws.onerror = () => {
         setStatus("error");
       };
 
@@ -215,9 +214,8 @@ export default function LiveConversationScreen() {
         playsInSilentModeIOS: true,
       });
 
-      // Note: In Expo, continuous chunk streaming requires a workaround
-      // We use recording with periodic stop/restart to get chunks
       setIsRecording(true);
+      isRecordingRef.current = true;
       recordChunk();
     } catch (error) {
       console.error("Failed to start recording:", error);
@@ -232,15 +230,15 @@ export default function LiveConversationScreen() {
       const { recording } = await Audio.Recording.createAsync({
         android: {
           extension: ".wav",
-          outputFormat: 2, // THREE_GPP → but we want WAV-like
-          audioEncoder: 1, // AMR_NB
+          outputFormat: 2,
+          audioEncoder: 1,
           sampleRate: 16000,
           numberOfChannels: 1,
           bitRate: 256000,
         },
         ios: {
           extension: ".wav",
-          audioQuality: 96, // Audio.IOSAudioQuality.MEDIUM
+          audioQuality: 96,
           sampleRate: 16000,
           numberOfChannels: 1,
           bitRate: 256000,
@@ -263,8 +261,6 @@ export default function LiveConversationScreen() {
         recordingRef.current = null;
 
         if (uri) {
-          // Read file and send as binary
-          const FileSystem = require("expo-file-system");
           const base64Data = await FileSystem.readAsStringAsync(uri, {
             encoding: FileSystem.EncodingType.Base64,
           });
@@ -283,14 +279,12 @@ export default function LiveConversationScreen() {
         }
 
         // Continue recording if still active
-        if (isRecording && wsRef.current?.readyState === WebSocket.OPEN) {
-          // Small delay to prevent rapid loop
+        if (isRecordingRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
           setTimeout(recordChunk, 50);
         }
       }
     } catch (error) {
-      // Recording might fail if we're stopping
-      if (isRecording) {
+      if (isRecordingRef.current) {
         setTimeout(recordChunk, 200);
       }
     }
@@ -303,7 +297,6 @@ export default function LiveConversationScreen() {
         await soundRef.current.unloadAsync();
       }
 
-      const FileSystem = require("expo-file-system");
       const base64 = btoa(
         new Uint8Array(audioData).reduce(
           (data, byte) => data + String.fromCharCode(byte),
@@ -338,6 +331,7 @@ export default function LiveConversationScreen() {
   // Stop recording
   const stopRecording = async () => {
     setIsRecording(false);
+    isRecordingRef.current = false;
     if (recordingRef.current) {
       try {
         await recordingRef.current.stopAndUnloadAsync();
@@ -348,7 +342,7 @@ export default function LiveConversationScreen() {
 
   // End session
   const endSession = async () => {
-    stopRecording();
+    await stopRecording();
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "end" }));
@@ -367,6 +361,7 @@ export default function LiveConversationScreen() {
     connectWebSocket();
 
     return () => {
+      isRecordingRef.current = false;
       stopRecording();
       if (wsRef.current) {
         wsRef.current.close();
@@ -381,7 +376,7 @@ export default function LiveConversationScreen() {
   const getStatusInfo = () => {
     switch (status) {
       case "connecting": return { text: "Verbinde...", color: "#f59e0b" };
-      case "listening": return { text: "Ich höre zu...", color: "#22c55e" };
+      case "listening": return { text: "Ich hoere zu...", color: "#22c55e" };
       case "thinking": return { text: "Denke nach...", color: "#3b82f6" };
       case "speaking": return { text: "ALICE spricht...", color: "#0284c7" };
       case "error": return { text: "Fehler", color: "#ef4444" };
@@ -401,6 +396,8 @@ export default function LiveConversationScreen() {
     }
   };
 
+  const orbColor = getOrbColor();
+
   return (
     <View style={{ flex: 1, backgroundColor: "#0f172a" }}>
       <StatusBar barStyle="light-content" />
@@ -408,7 +405,7 @@ export default function LiveConversationScreen() {
       {/* Top Bar */}
       <View style={{ paddingTop: 60, paddingHorizontal: 20, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Text style={{ color: "#ffffff", fontSize: 18, fontWeight: "600" }}>
-          Live-Gespräch
+          Live-Gespraech
         </Text>
         <TouchableOpacity
           onPress={endSession}
@@ -425,57 +422,52 @@ export default function LiveConversationScreen() {
 
       {/* Orb Area */}
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        {/* Pulse ring */}
+        {/* Pulse ring (visible during speaking) */}
         <Animated.View
-          style={[
-            pulseAnimatedStyle,
-            {
-              position: "absolute",
-              width: 200,
-              height: 200,
-              borderRadius: 100,
-              borderWidth: 2,
-              borderColor: getOrbColor(),
-            },
-          ]}
+          style={{
+            position: "absolute",
+            width: 200,
+            height: 200,
+            borderRadius: 100,
+            borderWidth: 2,
+            borderColor: orbColor,
+            transform: [{ scale: pulseScale }],
+            opacity: pulseOpacity,
+          }}
         />
 
         {/* Rotating ring */}
         <Animated.View
-          style={[
-            ringAnimatedStyle,
-            {
-              position: "absolute",
-              width: 220,
-              height: 220,
-              borderRadius: 110,
-              borderWidth: 1,
-              borderColor: "transparent",
-              borderTopColor: getOrbColor(),
-              borderBottomColor: getOrbColor(),
-              opacity: 0.5,
-            },
-          ]}
+          style={{
+            position: "absolute",
+            width: 220,
+            height: 220,
+            borderRadius: 110,
+            borderWidth: 1,
+            borderColor: "transparent",
+            borderTopColor: orbColor,
+            borderBottomColor: orbColor,
+            opacity: 0.5,
+            transform: [{ rotate: ringRotationDeg }],
+          }}
         />
 
         {/* Main orb */}
         <Animated.View
-          style={[
-            orbAnimatedStyle,
-            {
-              width: 160,
-              height: 160,
-              borderRadius: 80,
-              backgroundColor: getOrbColor(),
-              shadowColor: getOrbColor(),
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: 0.5,
-              shadowRadius: 30,
-              elevation: 20,
-              alignItems: "center",
-              justifyContent: "center",
-            },
-          ]}
+          style={{
+            width: 160,
+            height: 160,
+            borderRadius: 80,
+            backgroundColor: orbColor,
+            shadowColor: orbColor,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.5,
+            shadowRadius: 30,
+            elevation: 20,
+            alignItems: "center",
+            justifyContent: "center",
+            transform: [{ scale: orbScale }],
+          }}
         >
           <Ionicons
             name={status === "listening" ? "mic" : status === "speaking" ? "volume-high" : "ellipsis-horizontal"}
@@ -492,7 +484,7 @@ export default function LiveConversationScreen() {
         </View>
       </View>
 
-      {/* Transcript area (semi-transparent, scrollable) */}
+      {/* Transcript area */}
       <View style={{ maxHeight: 200, paddingHorizontal: 20, paddingBottom: 40 }}>
         <ScrollView
           ref={scrollViewRef}

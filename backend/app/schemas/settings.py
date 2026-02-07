@@ -90,6 +90,7 @@ class ApiKeyUpdate(BaseModel):
     """Schema for updating API keys (partial update)."""
 
     anthropic: str | None = Field(None, min_length=1, description="Anthropic API key")
+    openai: str | None = Field(None, min_length=1, description="OpenAI API key (for Whisper STT)")
     elevenlabs: str | None = Field(None, min_length=1, description="ElevenLabs API key")
     deepgram: str | None = Field(None, min_length=1, description="Deepgram API key")
 
@@ -98,6 +99,7 @@ class ApiKeyResponse(BaseModel):
     """Schema for API keys response (masked)."""
 
     anthropic: str | None = Field(None, description="Anthropic API key (masked: ...XXXX)")
+    openai: str | None = Field(None, description="OpenAI API key (masked: ...XXXX)")
     elevenlabs: str | None = Field(None, description="ElevenLabs API key (masked: ...XXXX)")
     deepgram: str | None = Field(None, description="Deepgram API key (masked: ...XXXX)")
     system_anthropic_active: bool = Field(False, description="System Anthropic API key configured in .env?")
