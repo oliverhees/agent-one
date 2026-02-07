@@ -15,6 +15,9 @@
 3. [Nudge Endpoints](#nudge-endpoints)
 4. [Dashboard Endpoint](#dashboard-endpoint)
 5. [ADHS Settings Endpoints](#adhs-settings-endpoints)
+   - [GET /api/v1/settings/adhs](#get-apiv1settingsadhs)
+   - [PUT /api/v1/settings/adhs](#put-apiv1settingsadhs)
+   - [POST /api/v1/settings/push-token](#post-apiv1settingspush-token)
 6. [Neue Fehlercodes (Phase 3)](#neue-fehlercodes-phase-3)
 7. [Zusammenfassung Phase 3](#zusammenfassung-phase-3)
 
@@ -738,6 +741,37 @@ Aktualisiert die ADHS-Einstellungen des Nutzers. Partial Update: Nur uebergebene
 
 ---
 
+### `POST /api/v1/settings/push-token`
+
+Registriert einen Expo Push Notification Token fuer den authentifizierten Nutzer. Der Token wird verwendet, um Push-Benachrichtigungen an das Geraet des Nutzers zu senden (z.B. Deadline-Erinnerungen, Streak-Warnungen, Tagesplaene).
+
+**Auth:** Bearer Token erforderlich
+**Rate Limit:** Standard (60/min)
+
+**Request Body:**
+```json
+{
+  "expo_push_token": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]"
+}
+```
+
+**Request Schema:**
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|---|---|---|---|---|
+| `expo_push_token` | `str` | Ja | Min. 10 Zeichen | Expo Push Notification Token vom Geraet |
+
+**Response:** 204 No Content
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 422 | `VALIDATION_ERROR` | Token zu kurz oder ungueltig |
+
+---
+
 ## Neue Fehlercodes (Phase 3)
 
 Die folgenden Fehlercodes ergaenzen die bestehende Fehlercodes-Tabelle aus ENDPOINTS.md:
@@ -767,8 +801,9 @@ Die folgenden Fehlercodes ergaenzen die bestehende Fehlercodes-Tabelle aus ENDPO
 | GET | `/api/v1/dashboard/summary` | Aggregierte Dashboard-Daten | Ja | 60/min |
 | GET | `/api/v1/settings/adhs` | ADHS-Einstellungen lesen | Ja | 60/min |
 | PUT | `/api/v1/settings/adhs` | ADHS-Einstellungen aendern | Ja | 60/min |
+| POST | `/api/v1/settings/push-token` | Expo Push Token registrieren | Ja | 60/min |
 
-**Gesamt Phase 3: 11 neue Endpoints**
+**Gesamt Phase 3: 12 neue Endpoints**
 
 ### Gesamt ueber alle Phasen
 
@@ -776,5 +811,5 @@ Die folgenden Fehlercodes ergaenzen die bestehende Fehlercodes-Tabelle aus ENDPO
 |---|---|---|
 | Phase 1: Foundation | 10 | Implementiert |
 | Phase 2: Core Features | 14 | Implementiert |
-| Phase 3: ADHS-Modus | 11 | Spezifiziert |
-| **Gesamt** | **35** | -- |
+| Phase 3: ADHS-Modus | 12 | Spezifiziert |
+| **Gesamt** | **36** | -- |

@@ -13,6 +13,7 @@
 2. [5-Schicht-Architektur](#2-5-schicht-architektur)
 3. [System-Uebersicht (Diagramm)](#3-system-uebersicht)
 4. [Datenfluss-Diagramme](#4-datenfluss-diagramme)
+   - 4.5 [Background Scheduler und Push Notifications](#45-background-scheduler-und-push-notifications)
 5. [Backend-Projektstruktur](#5-backend-projektstruktur)
 6. [Frontend-Projektstruktur](#6-frontend-projektstruktur)
 7. [Komponentenarchitektur](#7-komponentenarchitektur)
@@ -444,6 +445,152 @@ sequenceDiagram
     Brain-->>API: SearchResponse [{entry, score, matched_chunks}]
     API-->>App: Search results
 ```
+
+---
+
+## 4.5 Background Scheduler und Push Notifications
+
+ALICE verfuegt ueber einen in-process Background Scheduler (asyncio Task), der regelmaessig proaktive Checks durchfuehrt und Push Notifications versendet. Der Scheduler laeuft im FastAPI-Prozess (nicht als separater Container) und wird in der `lifespan`-Funktion gestartet.
+
+### Scheduler-Architektur
+
+```mermaid
+graph TB
+    subgraph "FastAPI Prozess"
+        LIFESPAN["Lifespan Handler"]
+        SCHEDULER["Background Scheduler<br/>(asyncio Task)"]
+        API["API Endpoints"]
+        NOTIF_SERVICE["NotificationService"]
+        SETTINGS_SERVICE["SettingsService"]
+    end
+
+    subgraph "Datenbank"
+        USER_SETTINGS["user_settings<br/>(expo_push_token)"]
+        TASKS["tasks<br/>(due_date, status)"]
+        USER_STATS["user_stats<br/>(last_active_date)"]
+        NUDGE_HISTORY["nudge_history"]
+    end
+
+    subgraph "Externe Services"
+        EXPO["Expo Push API<br/>(expo.dev)"]
+    end
+
+    LIFESPAN -->|startup| SCHEDULER
+    SCHEDULER -->|5-Min-Intervall| SCHEDULER
+
+    SCHEDULER --> TASKS
+    SCHEDULER --> USER_STATS
+    SCHEDULER --> USER_SETTINGS
+
+    SCHEDULER -->|Check Deadlines| NOTIF_SERVICE
+    SCHEDULER -->|Check Streaks| NOTIF_SERVICE
+    SCHEDULER -->|Check Overdue| NOTIF_SERVICE
+
+    NOTIF_SERVICE --> USER_SETTINGS
+    NOTIF_SERVICE -->|HTTP POST| EXPO
+    NOTIF_SERVICE --> NUDGE_HISTORY
+
+    API --> SETTINGS_SERVICE
+    SETTINGS_SERVICE --> USER_SETTINGS
+```
+
+### Scheduler-Intervalle
+
+| Job | Intervall | Beschreibung |
+|-----|-----------|-------------|
+| Deadline Check | 5 Minuten | Prueft Tasks mit due_date in den naechsten 24h, sendet Warnung |
+| Overdue Check | 5 Minuten | Prueft ueberfaellige Tasks (due_date < jetzt, status != completed) |
+| Streak Check | 5 Minuten | Prueft ob Nutzer heute bereits aktiv war, warnt vor Streak-Verlust |
+
+### Zeitbewusstsein im System-Prompt
+
+ALICE kennt Datum und Uhrzeit. Der ChatService injiziert folgende Informationen in den System-Prompt:
+
+```python
+current_time = datetime.now(pytz.timezone("Europe/Berlin"))
+system_prompt += f"""
+
+Aktuelle Zeit: {current_time.strftime("%A, %d. %B %Y, %H:%M Uhr")}
+Zeitzone: Europe/Berlin
+
+Du kannst diese Information nutzen um:
+- Zeitlich relevante Vorschlaege zu machen ("Es ist spaet, vielleicht morgen?")
+- Due Dates realistisch einzuschaetzen
+- Tageszeiten-spezifische Empfehlungen zu geben
+"""
+```
+
+Beispiel: "Aktuelle Zeit: Freitag, 07. Februar 2026, 14:30 Uhr"
+
+### Notification Service
+
+Der `NotificationService` ist verantwortlich fuer das Versenden von Push Notifications ueber die Expo Push API.
+
+**Features:**
+- Single Push: Ein Token, eine Nachricht
+- Bulk Push: Mehrere Tokens, gleiche Nachricht (Batching mit max 100 Tokens pro Request)
+- Retry Logic: 3 Versuche mit Exponential Backoff bei HTTP-Fehlern
+- Token Validation: Prueft Format `ExponentPushToken[...]`
+- Error Handling: Loggt Fehler, setzt Token auf `null` bei DeviceNotRegistered
+- Quiet Hours: Respektiert Ruhezeiten aus user_settings
+
+**Implementierung:**
+```python
+# backend/app/services/notification.py
+
+async def send_push_notification(
+    user_id: UUID,
+    title: str,
+    body: str,
+    data: dict | None = None,
+    priority: str = "high"
+) -> bool:
+    """Sendet eine Push Notification an einen Nutzer.
+
+    Returns:
+        True wenn erfolgreich versendet, False bei Fehler.
+    """
+```
+
+**Expo Push API Request:**
+```json
+POST https://exp.host/--/api/v2/push/send
+{
+  "to": "ExponentPushToken[...]",
+  "title": "Task faellig in 1 Stunde",
+  "body": "Arzttermin vereinbaren",
+  "data": {
+    "type": "deadline_warning",
+    "task_id": "uuid",
+    "deep_link": "/tasks/uuid"
+  },
+  "sound": "default",
+  "priority": "high"
+}
+```
+
+**Deep Links:**
+- `/tasks/:id` - Oeffnet Task-Detail
+- `/dashboard` - Oeffnet Dashboard
+- `/chat` - Oeffnet Chat
+
+### Push Token Registration
+
+Der Mobile Client registriert seinen Push Token via `POST /api/v1/settings/push-token`:
+
+```typescript
+// mobile/app/_layout.tsx (nach erfolgreicher Auth)
+
+import * as Notifications from 'expo-notifications';
+
+const { status } = await Notifications.requestPermissionsAsync();
+if (status === 'granted') {
+  const token = await Notifications.getExpoPushTokenAsync();
+  await settingsApi.registerPushToken(token.data);
+}
+```
+
+Der Token wird im `user_settings` JSONB-Blob gespeichert (Feld `expo_push_token`). Es wird KEINE neue Datenbanktabelle oder Migration benoetigt.
 
 ---
 
