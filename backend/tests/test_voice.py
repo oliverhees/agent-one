@@ -204,20 +204,20 @@ class TestSynthesizeEndpoint:
 class TestProviderFactory:
     """Tests for voice provider factory."""
 
-    async def test_get_stt_provider_deepgram_default(
+    async def test_get_stt_provider_deepgram_no_key_raises(
         self, test_db, test_user
     ):
-        """Default STT provider should be Deepgram."""
+        """Default STT provider without API key should raise ValueError."""
         user_data, _, _ = test_user
         user_id = user_data["id"]
 
-        provider = await get_stt_provider(test_db, user_id)
-        assert isinstance(provider, DeepgramSTT)
+        with pytest.raises(ValueError, match="Kein Deepgram API Key"):
+            await get_stt_provider(test_db, user_id)
 
-    async def test_get_stt_provider_whisper(
+    async def test_get_stt_provider_whisper_no_key_raises(
         self, authenticated_client: AsyncClient, test_db, test_user
     ):
-        """STT provider should be Whisper if configured."""
+        """Whisper provider without API key should raise ValueError."""
         user_data, _, _ = test_user
         user_id = user_data["id"]
 
@@ -227,18 +227,18 @@ class TestProviderFactory:
             json={"stt_provider": "whisper"},
         )
 
-        provider = await get_stt_provider(test_db, user_id)
-        assert isinstance(provider, WhisperSTT)
+        with pytest.raises(ValueError, match="Kein OpenAI API Key"):
+            await get_stt_provider(test_db, user_id)
 
-    async def test_get_tts_provider_elevenlabs_default(
+    async def test_get_tts_provider_fallback_to_edge_tts(
         self, test_db, test_user
     ):
-        """Default TTS provider should be ElevenLabs."""
+        """Default TTS provider without ElevenLabs key should fall back to Edge-TTS."""
         user_data, _, _ = test_user
         user_id = user_data["id"]
 
         provider = await get_tts_provider(test_db, user_id)
-        assert isinstance(provider, ElevenLabsTTS)
+        assert isinstance(provider, EdgeTTSProvider)
 
     async def test_get_tts_provider_edge_tts(
         self, authenticated_client: AsyncClient, test_db, test_user

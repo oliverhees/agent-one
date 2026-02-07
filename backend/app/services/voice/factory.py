@@ -39,14 +39,28 @@ async def get_stt_provider(db: AsyncSession, user_id: UUID) -> STTProvider:
         encrypted_key = api_keys.get("deepgram")
         if encrypted_key:
             key = decrypt_value(encrypted_key)
+        elif getattr(app_settings, "deepgram_api_key", None):
+            key = app_settings.deepgram_api_key
         else:
-            key = ""  # Will fail gracefully in provider
+            raise ValueError(
+                "Kein Deepgram API Key konfiguriert. "
+                "Bitte unter Settings > API Keys einen Deepgram Key hinterlegen."
+            )
         return DeepgramSTT(api_key=key)
 
     elif provider_name == "whisper":
         from app.services.voice.whisper_stt import WhisperSTT
 
-        key = app_settings.openai_api_key or ""
+        encrypted_key = api_keys.get("openai")
+        if encrypted_key:
+            key = decrypt_value(encrypted_key)
+        elif getattr(app_settings, "openai_api_key", None):
+            key = app_settings.openai_api_key
+        else:
+            raise ValueError(
+                "Kein OpenAI API Key konfiguriert. "
+                "Bitte unter Settings > API Keys einen OpenAI Key hinterlegen."
+            )
         return WhisperSTT(api_key=key)
 
     else:
@@ -80,9 +94,11 @@ async def get_tts_provider(db: AsyncSession, user_id: UUID) -> TTSProvider:
         encrypted_key = api_keys.get("elevenlabs")
         if encrypted_key:
             key = decrypt_value(encrypted_key)
-        else:
-            key = ""  # Will fail gracefully in provider
-        return ElevenLabsTTS(api_key=key)
+            return ElevenLabsTTS(api_key=key)
+        # No ElevenLabs key → fall back to free Edge-TTS
+        from app.services.voice.edge_tts_provider import EdgeTTSProvider
+
+        return EdgeTTSProvider()
 
     elif provider_name == "edge-tts":
         from app.services.voice.edge_tts_provider import EdgeTTSProvider
