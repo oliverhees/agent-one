@@ -1,12 +1,14 @@
 import "../global.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Slot, SplashScreen, useRouter, useSegments } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import * as Notifications from "expo-notifications";
 import { useAuthStore } from "../stores/authStore";
-import { initializePushNotifications } from "../services/notificationService";
+import {
+  initializePushNotifications,
+  setupNotificationListeners,
+} from "../services/notificationService";
 import { useNotificationStore } from "../stores/notificationStore";
 
 // Query Client für TanStack Query
@@ -28,8 +30,6 @@ export default function RootLayout() {
   const { isAuthenticated, isLoading, loadStoredAuth } = useAuthStore();
   const addNotification = useNotificationStore((s) => s.addNotification);
   const [mounted, setMounted] = useState(false);
-  const notificationListener = useRef<Notifications.EventSubscription>();
-  const responseListener = useRef<Notifications.EventSubscription>();
 
   // Auth-State beim Start laden
   useEffect(() => {
@@ -47,9 +47,8 @@ export default function RootLayout() {
 
     initializePushNotifications();
 
-    // Listener: Notification empfangen (Foreground)
-    notificationListener.current =
-      Notifications.addNotificationReceivedListener((notification) => {
+    const cleanup = setupNotificationListeners({
+      onReceived: (notification: any) => {
         const { title, body, data } = notification.request.content;
         addNotification({
           id: notification.request.identifier,
@@ -57,29 +56,18 @@ export default function RootLayout() {
           message: body || "",
           data: data as Record<string, unknown> | undefined,
         });
-      });
-
-    // Listener: User tippt auf Notification
-    responseListener.current =
-      Notifications.addNotificationResponseReceivedListener((response) => {
+      },
+      onResponse: (response: any) => {
         const data = response.notification.request.content.data;
         if (data?.type === "deadline" || data?.type === "overdue") {
           router.push("/(tabs)/tasks" as any);
         } else if (data?.type === "streak") {
           router.push("/(tabs)/dashboard" as any);
         }
-      });
+      },
+    });
 
-    return () => {
-      if (notificationListener.current) {
-        Notifications.removeNotificationSubscription(
-          notificationListener.current
-        );
-      }
-      if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
-      }
-    };
+    return cleanup;
   }, [isAuthenticated]);
 
   // Navigation basierend auf Auth-Status

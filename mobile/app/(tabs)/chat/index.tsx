@@ -182,7 +182,7 @@ export default function ChatScreen() {
 
   return (
     <KeyboardAvoidingView
-      behavior="padding"
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
       className="flex-1 bg-white dark:bg-gray-900"
       keyboardVerticalOffset={Platform.OS === "ios" ? tabBarHeight : 0}
     >
