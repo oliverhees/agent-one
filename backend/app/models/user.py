@@ -8,12 +8,16 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import BaseModel
 
 if TYPE_CHECKING:
+    from app.models.achievement import UserAchievement
     from app.models.brain_entry import BrainEntry
     from app.models.conversation import Conversation
     from app.models.mentioned_item import MentionedItem
+    from app.models.nudge_history import NudgeHistory
     from app.models.personality_profile import PersonalityProfile
     from app.models.refresh_token import RefreshToken
     from app.models.task import Task
+    from app.models.user_settings import UserSettings
+    from app.models.user_stats import UserStats
 
 
 class User(BaseModel):
@@ -88,6 +92,32 @@ class User(BaseModel):
 
     personality_profiles: Mapped[list["PersonalityProfile"]] = relationship(
         back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    user_stats: Mapped["UserStats | None"] = relationship(
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    user_achievements: Mapped[list["UserAchievement"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    nudges: Mapped[list["NudgeHistory"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    user_settings: Mapped["UserSettings | None"] = relationship(
+        back_populates="user",
+        uselist=False,
         cascade="all, delete-orphan",
         lazy="selectin",
     )

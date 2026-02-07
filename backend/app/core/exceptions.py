@@ -231,3 +231,49 @@ class RateLimitExceededError(AliceException):
             code="RATE_LIMIT_EXCEEDED",
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         )
+
+
+# Phase 3: ADHS-Modus Exceptions
+
+class NudgeNotFoundError(AliceException):
+    """Nudge not found or doesn't belong to user."""
+
+    def __init__(self, nudge_id: str):
+        super().__init__(
+            detail=f"Nudge '{nudge_id}' not found or access denied",
+            code="NUDGE_NOT_FOUND",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+
+class NudgeAlreadyAcknowledgedError(AliceException):
+    """Nudge has already been acknowledged."""
+
+    def __init__(self, nudge_id: str):
+        super().__init__(
+            detail=f"Nudge '{nudge_id}' has already been acknowledged",
+            code="NUDGE_ALREADY_ACKNOWLEDGED",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class TaskAlreadyHasSubtasksError(AliceException):
+    """Task already has sub-tasks (breakdown not possible)."""
+
+    def __init__(self, task_id: str):
+        super().__init__(
+            detail=f"Task '{task_id}' already has sub-tasks",
+            code="TASK_ALREADY_HAS_SUBTASKS",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class SettingsValidationError(AliceException):
+    """Settings validation failed."""
+
+    def __init__(self, detail: str):
+        super().__init__(
+            detail=detail,
+            code="SETTINGS_VALIDATION_ERROR",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )

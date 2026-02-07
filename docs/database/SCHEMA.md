@@ -1,7 +1,7 @@
 # Datenbankschema
 
 **Letzte Aenderung:** 2026-02-06
-**Letzte Migration:** 002_phase2_tables
+**Letzte Migration:** 003_phase3_tables
 **Datenbank:** PostgreSQL 16 + pgvector Extension
 **ORM:** SQLAlchemy 2.0 (async)
 **Migrationen:** Alembic
@@ -38,6 +38,8 @@ erDiagram
     users ||--o{ notification_log : has
     users ||--o{ user_plugins : has
     users ||--o{ user_achievements : has
+    users ||--o{ nudge_history : has
+    users ||--|| user_settings : has
     users ||--o{ xp_history : has
     users ||--o{ calendar_events : has
 
@@ -405,6 +407,8 @@ Vordefinierte Persoenlichkeits-Templates als Ausgangspunkt.
 
 ## Phase 3: ADHS-Modus
 
+**Migration:** `003_phase3_tables` (implementiert: user_stats, achievements, user_achievements, nudge_history, user_settings)
+
 ### Tabelle: `user_stats`
 
 Speichert aggregierte Gamification-Statistiken pro Nutzer. 1:1 Beziehung zu `users`.
@@ -418,8 +422,7 @@ Speichert aggregierte Gamification-Statistiken pro Nutzer. 1:1 Beziehung zu `use
 | `current_streak` | `INTEGER` | `NOT NULL, DEFAULT 0` | Aktuelle Streak (aufeinanderfolgende produktive Tage) |
 | `longest_streak` | `INTEGER` | `NOT NULL, DEFAULT 0` | Laengste Streak aller Zeiten |
 | `last_active_date` | `DATE` | `NULL` | Letzter Tag mit erledigtem Task |
-| `tasks_completed_today` | `INTEGER` | `NOT NULL, DEFAULT 0` | Heute erledigte Tasks (Reset um Mitternacht) |
-| `tasks_completed_total` | `INTEGER` | `NOT NULL, DEFAULT 0` | Gesamtzahl erledigter Tasks |
+| `tasks_completed` | `INTEGER` | `NOT NULL, DEFAULT 0` | Gesamtzahl erledigter Tasks |
 | `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT now()` | Erstellungszeitpunkt |
 | `updated_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT now()` | Letzter Update-Zeitpunkt |
 
@@ -438,34 +441,6 @@ level = floor(sqrt(total_xp / 100))
 
 ---
 
-### Tabelle: `xp_history`
-
-Speichert einzelne XP-Vergaben fuer Nachvollziehbarkeit und Statistiken.
-
-| Spalte | Typ | Constraints | Beschreibung |
-|---|---|---|---|
-| `id` | `UUID` | `PK, DEFAULT gen_random_uuid()` | Eindeutige History-ID |
-| `user_id` | `UUID` | `NOT NULL, FK -> users(id) ON DELETE CASCADE` | Zugehoeriger Benutzer |
-| `amount` | `INTEGER` | `NOT NULL` | XP-Betrag (positiv) |
-| `source` | `xp_source` | `NOT NULL` | Quelle: `task_complete`, `streak_bonus`, `achievement`, `daily_bonus` |
-| `source_id` | `UUID` | `NULL` | ID der Quelle (z.B. Task-ID) |
-| `description` | `VARCHAR(255)` | `NULL` | Lesbare Beschreibung (z.B. "Task erledigt: Arzttermin") |
-| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT now()` | Zeitpunkt der Vergabe |
-
-**Indizes:**
-- `ix_xp_history_user_id` auf `user_id`
-- `ix_xp_history_user_created` auf `(user_id, created_at DESC)` -- fuer XP-Verlauf
-
-**XP-Berechnung bei Task-Erledigung:**
-```
-base_xp = {low: 10, medium: 25, high: 50, urgent: 100}
-rechtzeitig_bonus = base_xp * 0.5 (wenn vor oder am due_date erledigt)
-streak_bonus = base_xp * 0.25 (wenn current_streak > 0)
-total_xp = base_xp + rechtzeitig_bonus + streak_bonus
-```
-
----
-
 ### Tabelle: `achievements`
 
 Definiert die verfuegbaren Achievements (Seed-Daten, nicht User-spezifisch).
@@ -473,39 +448,33 @@ Definiert die verfuegbaren Achievements (Seed-Daten, nicht User-spezifisch).
 | Spalte | Typ | Constraints | Beschreibung |
 |---|---|---|---|
 | `id` | `UUID` | `PK, DEFAULT gen_random_uuid()` | Eindeutige Achievement-ID |
-| `name` | `VARCHAR(100)` | `NOT NULL, UNIQUE` | Achievement-Name |
+| `name` | `VARCHAR(255)` | `NOT NULL, UNIQUE` | Achievement-Name |
 | `description` | `TEXT` | `NOT NULL` | Beschreibung |
-| `icon` | `VARCHAR(50)` | `NOT NULL` | Icon-Bezeichnung |
-| `category` | `achievement_category` | `NOT NULL` | Kategorie: `tasks`, `streaks`, `brain`, `social`, `special` |
-| `condition` | `JSONB` | `NOT NULL` | Freischalt-Bedingung |
+| `icon` | `VARCHAR(100)` | `NOT NULL` | Icon-Bezeichnung (Emoji oder Icon-Name) |
+| `category` | `achievement_category` | `NOT NULL` | Kategorie: `task`, `streak`, `brain`, `social`, `special` |
+| `condition_type` | `VARCHAR(100)` | `NOT NULL` | Bedingungstyp (z.B. `tasks_completed`, `streak_days`, `brain_entries`) |
+| `condition_value` | `INTEGER` | `NOT NULL` | Schwellenwert fuer die Bedingung |
 | `xp_reward` | `INTEGER` | `NOT NULL, DEFAULT 0` | XP-Belohnung bei Freischaltung |
+| `is_active` | `BOOLEAN` | `NOT NULL, DEFAULT true` | Achievement aktiv? |
 | `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT now()` | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT now()` | Letzter Update-Zeitpunkt |
 
-**`condition` JSONB Struktur:**
-```json
-{
-  "type": "tasks_completed",
-  "threshold": 100,
-  "description": "Erledige 100 Tasks"
-}
-```
+**Indizes:**
+- `ix_achievements_category` auf `category`
+- `ix_achievements_name` UNIQUE auf `name`
 
-**Seed-Daten (Beispiele):**
+**Seed-Daten (8 Achievements):**
 
-| Name | Kategorie | Bedingung |
-|---|---|---|
-| First Step | tasks | tasks_completed >= 1 |
-| Task Master | tasks | tasks_completed >= 100 |
-| Marathon | tasks | tasks_completed >= 1000 |
-| Week Warrior | streaks | current_streak >= 7 |
-| Month Crusher | streaks | current_streak >= 30 |
-| Century Streak | streaks | current_streak >= 100 |
-| Brain Starter | brain | brain_entries >= 10 |
-| Brain Scholar | brain | brain_entries >= 50 |
-| Knowledge Base | brain | brain_entries >= 200 |
-| Level 5 | special | level >= 5 |
-| Level 10 | special | level >= 10 |
-| Level 25 | special | level >= 25 |
+| Name | Kategorie | condition_type | condition_value | XP | Icon |
+|---|---|---|---|---|---|
+| First Steps | task | tasks_completed | 1 | 50 | target |
+| Getting Things Done | task | tasks_completed | 10 | 100 | check |
+| Century Club | task | tasks_completed | 100 | 500 | 100 |
+| Week Warrior | streak | streak_days | 7 | 150 | fire |
+| Dedicated | streak | streak_days | 30 | 500 | star |
+| Brain Scholar | brain | brain_entries | 10 | 100 | brain |
+| Knowledge Base | brain | brain_entries | 50 | 300 | books |
+| Speed Demon | special | task_under_5min | 1 | 75 | lightning |
 
 ---
 
@@ -519,34 +488,74 @@ Speichert freigeschaltete Achievements pro Nutzer.
 | `user_id` | `UUID` | `NOT NULL, FK -> users(id) ON DELETE CASCADE` | Zugehoeriger Benutzer |
 | `achievement_id` | `UUID` | `NOT NULL, FK -> achievements(id) ON DELETE CASCADE` | Freigeschaltetes Achievement |
 | `unlocked_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT now()` | Zeitpunkt der Freischaltung |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT now()` | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT now()` | Letzter Update-Zeitpunkt |
 
 **Indizes:**
 - `ix_user_achievements_user_id` auf `user_id`
+- `ix_user_achievements_achievement_id` auf `achievement_id`
 - `uq_user_achievements_user_achievement` UNIQUE auf `(user_id, achievement_id)` -- jedes Achievement nur einmal
 
 ---
 
-### Tabelle: `notification_log`
+### Tabelle: `nudge_history`
 
-Protokolliert alle gesendeten Notifications fuer Nachvollziehbarkeit und Analyse.
+Protokolliert alle gesendeten Nudges/Erinnerungen fuer den ADHS-Modus.
 
 | Spalte | Typ | Constraints | Beschreibung |
 |---|---|---|---|
-| `id` | `UUID` | `PK, DEFAULT gen_random_uuid()` | Eindeutige Notification-ID |
+| `id` | `UUID` | `PK, DEFAULT gen_random_uuid()` | Eindeutige Nudge-ID |
 | `user_id` | `UUID` | `NOT NULL, FK -> users(id) ON DELETE CASCADE` | Zugehoeriger Benutzer |
-| `type` | `notification_type` | `NOT NULL` | Typ: `daily_plan`, `task_reminder`, `deadline_warning`, `follow_up`, `nudge`, `achievement`, `streak`, `level_up`, `system` |
-| `title` | `VARCHAR(255)` | `NOT NULL` | Notification-Titel |
-| `body` | `TEXT` | `NOT NULL` | Notification-Inhalt |
-| `data` | `JSONB` | `NOT NULL, DEFAULT '{}'` | Zusaetzliche Daten (Deep Link, etc.) |
-| `nudge_level` | `INTEGER` | `NULL` | Eskalationsstufe (1=freundlich, 2=bestimmt, 3=dringlich) |
-| `sent_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT now()` | Versandzeitpunkt |
-| `read_at` | `TIMESTAMPTZ` | `NULL` | Gelesen-Zeitpunkt |
-| `snoozed_until` | `TIMESTAMPTZ` | `NULL` | Snoozed bis |
+| `task_id` | `UUID` | `NULL, FK -> tasks(id) ON DELETE SET NULL` | Zugehoeriger Task (optional) |
+| `nudge_level` | `INTEGER` | `NOT NULL, DEFAULT 1` | Eskalationsstufe: 1=freundlich, 2=bestimmt, 3=dringlich |
+| `nudge_type` | `nudge_type` | `NOT NULL` | Typ: `follow_up`, `deadline`, `streak_reminder`, `motivational` |
+| `message` | `TEXT` | `NOT NULL` | Nudge-Nachricht |
+| `delivered_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT now()` | Versandzeitpunkt |
+| `acknowledged_at` | `TIMESTAMPTZ` | `NULL` | Bestaetigungszeitpunkt |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT now()` | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT now()` | Letzter Update-Zeitpunkt |
 
 **Indizes:**
-- `ix_notification_log_user_id` auf `user_id`
-- `ix_notification_log_user_sent` auf `(user_id, sent_at DESC)`
-- `ix_notification_log_user_read` auf `(user_id, read_at)` -- fuer "ungelesene" Abfrage
+- `ix_nudge_history_user_id` auf `user_id`
+- `ix_nudge_history_user_unack` partial auf `(user_id) WHERE acknowledged_at IS NULL` -- fuer unbestaetigte Nudges
+
+---
+
+### Tabelle: `user_settings`
+
+Speichert ADHS-spezifische Einstellungen pro Nutzer als JSONB. 1:1 Beziehung zu `users`.
+
+| Spalte | Typ | Constraints | Beschreibung |
+|---|---|---|---|
+| `id` | `UUID` | `PK, DEFAULT gen_random_uuid()` | Eindeutige Settings-ID |
+| `user_id` | `UUID` | `NOT NULL, UNIQUE, FK -> users(id) ON DELETE CASCADE` | Zugehoeriger Benutzer |
+| `settings` | `JSONB` | `NOT NULL, DEFAULT (siehe unten)` | Einstellungs-Blob |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT now()` | Erstellungszeitpunkt |
+| `updated_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT now()` | Letzter Update-Zeitpunkt |
+
+**Indizes:**
+- `ix_user_settings_user_id` UNIQUE auf `user_id`
+
+**Default `settings` JSONB:**
+```json
+{
+  "adhs_mode": true,
+  "nudge_intensity": "medium",
+  "auto_breakdown": true,
+  "gamification_enabled": true,
+  "focus_timer_minutes": 25,
+  "quiet_hours_start": "22:00",
+  "quiet_hours_end": "07:00",
+  "preferred_reminder_times": ["09:00", "14:00", "18:00"]
+}
+```
+
+---
+
+### Noch nicht implementiert (Phase 3, spaetere Migration):
+
+- `xp_history` -- Einzelne XP-Vergaben fuer Nachvollziehbarkeit
+- `notification_log` -- Vollstaendiges Notification-Protokoll
 
 ---
 
@@ -655,13 +664,16 @@ CREATE TYPE embedding_status AS ENUM ('pending', 'processing', 'completed', 'fai
 CREATE TYPE mentioned_item_type AS ENUM ('task', 'appointment', 'idea', 'follow_up', 'reminder');
 CREATE TYPE mentioned_item_status AS ENUM ('pending', 'converted', 'dismissed', 'snoozed');
 
--- Phase 3
-CREATE TYPE xp_source AS ENUM ('task_complete', 'streak_bonus', 'achievement', 'daily_bonus');
-CREATE TYPE achievement_category AS ENUM ('tasks', 'streaks', 'brain', 'social', 'special');
-CREATE TYPE notification_type AS ENUM (
-    'daily_plan', 'task_reminder', 'deadline_warning', 'follow_up',
-    'nudge', 'achievement', 'streak', 'level_up', 'system'
-);
+-- Phase 3 (implementiert in 003_phase3_tables)
+CREATE TYPE achievement_category AS ENUM ('task', 'streak', 'brain', 'social', 'special');
+CREATE TYPE nudge_type AS ENUM ('follow_up', 'deadline', 'streak_reminder', 'motivational');
+
+-- Phase 3 (noch nicht implementiert)
+-- CREATE TYPE xp_source AS ENUM ('task_complete', 'streak_bonus', 'achievement', 'daily_bonus');
+-- CREATE TYPE notification_type AS ENUM (
+--     'daily_plan', 'task_reminder', 'deadline_warning', 'follow_up',
+--     'nudge', 'achievement', 'streak', 'level_up', 'system'
+-- );
 ```
 
 ---
@@ -697,13 +709,14 @@ CREATE TYPE notification_type AS ENUM (
 | personality_profiles | ix_personality_profiles_user_id | user_id | BTREE | User-Profile |
 | personality_profiles | ix_personality_profiles_user_active | user_id (WHERE is_active) | UNIQUE PARTIAL | Max 1 aktiv |
 | user_stats | ix_user_stats_user_id | user_id | UNIQUE, BTREE | 1:1 Lookup |
-| xp_history | ix_xp_history_user_id | user_id | BTREE | User-XP |
-| xp_history | ix_xp_history_user_created | user_id, created_at DESC | BTREE | XP-Verlauf |
+| achievements | ix_achievements_category | category | BTREE | Kategorie-Filter |
+| achievements | ix_achievements_name | name | UNIQUE, BTREE | Name-Lookup |
 | user_achievements | ix_user_achievements_user_id | user_id | BTREE | User-Achievements |
+| user_achievements | ix_user_achievements_achievement_id | achievement_id | BTREE | Achievement-Lookup |
 | user_achievements | uq_user_achievements_user_achievement | user_id, achievement_id | UNIQUE | Keine Duplikate |
-| notification_log | ix_notification_log_user_id | user_id | BTREE | User-Notifications |
-| notification_log | ix_notification_log_user_sent | user_id, sent_at DESC | BTREE | Chronologisch |
-| notification_log | ix_notification_log_user_read | user_id, read_at | BTREE | Ungelesene |
+| nudge_history | ix_nudge_history_user_id | user_id | BTREE | User-Nudges |
+| nudge_history | ix_nudge_history_user_unack | user_id (WHERE acknowledged_at IS NULL) | PARTIAL | Unbestaetigte |
+| user_settings | ix_user_settings_user_id | user_id | UNIQUE, BTREE | 1:1 Lookup |
 | user_plugins | ix_user_plugins_user_id | user_id | BTREE | User-Plugins |
 | user_plugins | uq_user_plugins_user_plugin | user_id, plugin_id | UNIQUE | Keine Duplikate |
 | plugin_data | ix_plugin_data_user_plugin | user_id, plugin_id | BTREE | Plugin-Daten |
@@ -716,18 +729,19 @@ CREATE TYPE notification_type AS ENUM (
 
 ## Migrations-Reihenfolge
 
+### Implementierte Migrationen
+
+| Nr. | Revision ID | Tabellen | Phase |
+|---|---|---|---|
+| 001 | 001_initial_schema | users, conversations, messages, refresh_tokens, pgvector Extension, message_role ENUM | 1 |
+| 002 | 002_phase2_tables | tasks, brain_entries, brain_embeddings, mentioned_items, personality_templates (+ Seed), personality_profiles, 7 ENUMs | 2 |
+| 003 | 003_phase3_tables | user_stats, achievements (+ Seed), user_achievements, nudge_history, user_settings, 2 ENUMs | 3 |
+
+### Geplante Migrationen
+
 | Nr. | Migration | Tabellen | Phase |
 |---|---|---|---|
-| 001 | initial_setup | pgvector Extension, ENUM Types | 1 |
-| 002 | create_users | users | 1 |
-| 003 | create_conversations_messages | conversations, messages | 1 |
-| 004 | create_tasks | tasks, task ENUMs | 2 |
-| 005 | create_brain | brain_entries, brain_embeddings, brain ENUMs | 2 |
-| 006 | create_mentioned_items | mentioned_items, mentioned_item ENUMs | 2 |
-| 007 | create_personality | personality_profiles, personality_templates | 2 |
-| 008 | create_gamification | user_stats, xp_history, achievements, user_achievements | 3 |
-| 009 | create_notifications | notification_log | 3 |
-| 010 | create_plugins | user_plugins, plugin_data | 4 |
-| 011 | create_calendar | calendar_events | 4 |
-| 012 | seed_personality_templates | INSERT personality_templates | 2 |
-| 013 | seed_achievements | INSERT achievements | 3 |
+| 004 | phase3_xp_history | xp_history, xp_source ENUM | 3 |
+| 005 | phase3_notification_log | notification_log, notification_type ENUM | 3 |
+| 006 | phase4_plugins | user_plugins, plugin_data | 4 |
+| 007 | phase4_calendar | calendar_events | 4 |

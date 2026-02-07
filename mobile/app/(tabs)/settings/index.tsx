@@ -56,6 +56,60 @@ export default function SettingsScreen() {
           </Card>
         </TouchableOpacity>
 
+        <TouchableOpacity
+          onPress={() => router.push("/(tabs)/settings/adhs")}
+          accessibilityLabel="ADHS-Einstellungen"
+        >
+          <Card className="mb-4">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center">
+                <Ionicons
+                  name="flash-outline"
+                  size={20}
+                  color="#0284c7"
+                  style={{ marginRight: 10 }}
+                />
+                <View>
+                  <Text className="text-lg font-semibold text-gray-900 dark:text-white">
+                    ADHS-Einstellungen
+                  </Text>
+                  <Text className="text-sm text-gray-500 dark:text-gray-400">
+                    Nudges, Timer und Gamification
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </View>
+          </Card>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => router.push("/(tabs)/settings/achievements")}
+          accessibilityLabel="Achievements anzeigen"
+        >
+          <Card className="mb-4">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center">
+                <Ionicons
+                  name="trophy-outline"
+                  size={20}
+                  color="#0284c7"
+                  style={{ marginRight: 10 }}
+                />
+                <View>
+                  <Text className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Achievements
+                  </Text>
+                  <Text className="text-sm text-gray-500 dark:text-gray-400">
+                    Abzeichen und Fortschritt
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </View>
+          </Card>
+        </TouchableOpacity>
+
         <Card className="mb-4">
           <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
             App-Version

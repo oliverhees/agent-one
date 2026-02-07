@@ -1,5 +1,6 @@
 """Task service for managing user tasks."""
 
+import math
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -189,6 +190,13 @@ class TaskService:
         await self.db.delete(task)
         await self.db.flush()
 
+    @staticmethod
+    def _calculate_level(total_xp: int) -> int:
+        """Calculate level from total XP. Formula: floor(sqrt(total_xp / 100)), min 1."""
+        if total_xp <= 0:
+            return 1
+        return max(1, int(math.floor(math.sqrt(total_xp / 100))))
+
     async def complete_task(
         self, task_id: UUID, user_id: UUID
     ) -> tuple[Task, int, int, int, bool]:
@@ -227,18 +235,31 @@ class TaskService:
         await self.db.flush()
         await self.db.refresh(task)
 
-        # Calculate total XP for user (simplified - sum all completed tasks)
-        xp_result = await self.db.execute(
-            select(func.coalesce(func.sum(Task.xp_earned), 0)).where(
-                Task.user_id == user_id,
-                Task.status == TaskStatus.DONE,
-            )
-        )
-        total_xp = xp_result.scalar_one()
+        # Update gamification stats (streak + XP)
+        from app.services.gamification import GamificationService
+        from app.services.achievement import AchievementService
 
-        # Simple level calculation: level = total_xp / 100 + 1
-        level = int(total_xp / 100) + 1
-        previous_level = int((total_xp - xp_earned) / 100) + 1
+        gamification = GamificationService(self.db)
+        await gamification.update_streak(user_id)
+        stats = await gamification.update_stats_on_complete(user_id, xp_earned)
+
+        # Streak bonus: +25% if current_streak > 0
+        if stats.current_streak > 0:
+            streak_bonus = int(xp_earned * 0.25)
+            if streak_bonus > 0:
+                stats.total_xp += streak_bonus
+                xp_earned += streak_bonus
+                task.xp_earned = xp_earned
+                stats.level = self._calculate_level(stats.total_xp)
+                await self.db.flush()
+
+        total_xp = stats.total_xp
+        level = self._calculate_level(total_xp)
+        previous_level = self._calculate_level(total_xp - xp_earned)
         level_up = level > previous_level
+
+        # Check and unlock achievements
+        achievement_service = AchievementService(self.db)
+        await achievement_service.check_and_unlock(user_id)
 
         return task, xp_earned, total_xp, level, level_up

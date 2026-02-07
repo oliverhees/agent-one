@@ -1,16 +1,20 @@
 """SQLAlchemy models."""
 
 from app.models.base import Base, BaseModel
+from app.models.achievement import Achievement, AchievementCategory, UserAchievement
 from app.models.brain_embedding import BrainEmbedding
 from app.models.brain_entry import BrainEntry, BrainEntryType, EmbeddingStatus
 from app.models.conversation import Conversation
 from app.models.mentioned_item import MentionedItem, MentionedItemStatus, MentionedItemType
 from app.models.message import Message, MessageRole
+from app.models.nudge_history import NudgeHistory, NudgeType
 from app.models.personality_profile import PersonalityProfile
 from app.models.personality_template import PersonalityTemplate
 from app.models.refresh_token import RefreshToken
 from app.models.task import Task, TaskPriority, TaskSource, TaskStatus
 from app.models.user import User
+from app.models.user_settings import UserSettings
+from app.models.user_stats import UserStats
 
 __all__ = [
     "Base",
@@ -33,4 +37,11 @@ __all__ = [
     "MentionedItemStatus",
     "PersonalityProfile",
     "PersonalityTemplate",
+    "Achievement",
+    "AchievementCategory",
+    "UserAchievement",
+    "NudgeHistory",
+    "NudgeType",
+    "UserSettings",
+    "UserStats",
 ]

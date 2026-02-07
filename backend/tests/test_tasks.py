@@ -312,7 +312,7 @@ class TestCompleteTask:
         assert response.status_code == 409
 
     async def test_complete_urgent_task_xp(self, authenticated_client: AsyncClient, test_user):
-        """Test that urgent tasks give 100 base XP."""
+        """Test that urgent tasks give 100 base XP + 25% streak bonus."""
         create_resp = await authenticated_client.post(
             "/api/v1/tasks/",
             json={"title": "Dringend", "priority": "urgent"},
@@ -323,11 +323,11 @@ class TestCompleteTask:
 
         assert response.status_code == 200
         data = response.json()
-        # Urgent base XP = 100 (no due date, so no on-time bonus)
-        assert data["xp_earned"] == 100
+        # Urgent base XP = 100 + 25% streak bonus = 125
+        assert data["xp_earned"] == 125
 
     async def test_complete_low_priority_task_xp(self, authenticated_client: AsyncClient, test_user):
-        """Test that low priority tasks give 10 base XP."""
+        """Test that low priority tasks give 10 base XP + 25% streak bonus."""
         create_resp = await authenticated_client.post(
             "/api/v1/tasks/",
             json={"title": "Unwichtig", "priority": "low"},
@@ -338,7 +338,8 @@ class TestCompleteTask:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["xp_earned"] == 10
+        # Low base XP = 10 + 25% streak bonus = 12
+        assert data["xp_earned"] == 12
 
 
 class TestTodayTasks:

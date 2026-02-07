@@ -111,6 +111,7 @@ class PersonalityService:
 
         if current_active and current_active.id != profile.id:
             current_active.is_active = False
+            await self.db.flush()
 
         # Activate the new profile
         profile.is_active = True
