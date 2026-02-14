@@ -18,6 +18,7 @@ from app.api.v1 import (
     voice,
     voice_live,
     memory,
+    wellbeing,
 )
 
 
@@ -45,3 +46,6 @@ router.include_router(voice_live.router, prefix="/voice", tags=["Voice Live"])
 
 # Phase 5: Memory/Knowledge Graph routers
 router.include_router(memory.router, prefix="/memory", tags=["Memory"])
+
+# Phase 7: Wellbeing/Guardian Angel routers
+router.include_router(wellbeing.router, prefix="/wellbeing", tags=["Wellbeing"])
