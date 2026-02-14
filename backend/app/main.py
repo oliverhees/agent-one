@@ -34,7 +34,8 @@ async def lifespan(app: FastAPI):
         import app.services.graphiti_client as gc_module
 
         client = GraphitiClient(
-            uri=settings.falkordb_uri,
+            host=settings.falkordb_host,
+            port=settings.falkordb_port,
             enabled=True,
         )
         await client.initialize()

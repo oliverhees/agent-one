@@ -141,10 +141,12 @@ class GraphitiClient:
 
     def __init__(
         self,
-        uri: str = "falkor://localhost:6379",
+        host: str = "localhost",
+        port: int = 6379,
         enabled: bool = True,
     ) -> None:
-        self.uri = uri
+        self.host = host
+        self.port = port
         self.enabled = enabled
         self._client: Any = None  # Graphiti instance, set in initialize()
         self._initialized = False
@@ -165,11 +167,16 @@ class GraphitiClient:
 
         try:
             from graphiti_core import Graphiti
+            from graphiti_core.driver.falkordb_driver import FalkorDriver
 
-            self._client = Graphiti(self.uri)
+            driver = FalkorDriver(host=self.host, port=self.port)
+            self._client = Graphiti(graph_driver=driver)
             await self._client.build_indices_and_constraints()
             self._initialized = True
-            logger.info("GraphitiClient initialized successfully (uri=%s).", self.uri)
+            logger.info(
+                "GraphitiClient initialized successfully (host=%s, port=%d).",
+                self.host, self.port,
+            )
         except Exception as exc:
             logger.warning(
                 "GraphitiClient initialization failed — disabling memory features: %s",
@@ -205,18 +212,16 @@ class GraphitiClient:
             return
 
         try:
-            from graphiti_core import RawEpisode, EpisodeType
+            from graphiti_core.nodes import EpisodeType
 
             for pattern in ADHD_SEED_PATTERNS:
-                episode = RawEpisode(
+                await self._client.add_episode(
                     name=f"adhd_pattern:{pattern['name']}",
-                    body=pattern["description"],
-                    episode_type=EpisodeType.text,
+                    episode_body=pattern["description"],
                     source_description="ADHS seed pattern",
                     reference_time=datetime.now(timezone.utc),
                     source=EpisodeType.text,
                 )
-                await self._client.add_episode(episode)
 
             logger.info("Seeded %d ADHS patterns into knowledge graph.", len(ADHD_SEED_PATTERNS))
         except Exception as exc:
@@ -248,20 +253,16 @@ class GraphitiClient:
             return None
 
         try:
-            from graphiti_core import RawEpisode, EpisodeType
+            from graphiti_core.nodes import EpisodeType
 
             ref_time = reference_time or datetime.now(timezone.utc)
 
-            episode = RawEpisode(
+            result = await self._client.add_episode(
                 name=name,
-                body=content,
-                episode_type=EpisodeType.text,
+                episode_body=content,
                 source_description=f"user:{user_id}",
                 reference_time=ref_time,
                 source=EpisodeType.text,
-            )
-            result = await self._client.add_episode(
-                episode,
                 group_id=user_id,
             )
 

@@ -1396,8 +1396,26 @@ class ChatService:
                 if word:
                     yield word + (" " if i < len(words) - 1 else "")
 
-        # TODO: Add episode processing for streaming path
-        # (needs to be triggered after all chunks are yielded)
+        # Process episode async for memory system (Phase 5)
+        try:
+            from app.services.graphiti_client import get_graphiti_client
+
+            graphiti = get_graphiti_client()
+            if graphiti.enabled:
+                messages_for_analysis = [
+                    {"role": m.role.value, "content": m.content}
+                    for m in messages
+                ] + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                asyncio.create_task(
+                    self._process_episode_background(
+                        graphiti, str(user_id), str(conversation_id), messages_for_analysis
+                    )
+                )
+        except Exception:
+            logger.warning("Failed to schedule episode processing for streaming path")
 
     @staticmethod
     async def _process_episode_background(
@@ -1405,10 +1423,10 @@ class ChatService:
     ) -> None:
         """Process conversation episode in background with its own DB session."""
         try:
-            from app.core.database import async_session_factory
+            from app.core.database import AsyncSessionLocal
             from app.services.memory import MemoryService
 
-            async with async_session_factory() as db:
+            async with AsyncSessionLocal() as db:
                 memory_service = MemoryService(db, graphiti)
                 await memory_service.process_episode(user_id, conversation_id, messages)
                 await db.commit()

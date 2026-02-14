@@ -95,10 +95,6 @@ class Settings(BaseSettings):
             return self.redis_url
         return f"redis://{self.redis_host}:{self.redis_port}/0"
 
-    @property
-    def falkordb_uri(self) -> str:
-        """Get FalkorDB connection URI for Graphiti."""
-        return f"falkor://{self.falkordb_host}:{self.falkordb_port}"
 
 
 # Global settings instance
