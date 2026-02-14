@@ -24,6 +24,6 @@ services:
       POSTGRES_USER: alice_dev
       POSTGRES_PASSWORD: alice_dev_123
 
-  redis:
+  falkordb:
     ports:
-      - "6379:6379"
+      - "${FALKORDB_PORT:-6379}:6379"

@@ -9,13 +9,15 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
+      falkordb:
         condition: service_healthy
     env_file:
       - .env
     environment:
       - POSTGRES_HOST=db
-      - REDIS_HOST=redis
+      - REDIS_HOST=falkordb
+      - FALKORDB_PORT=${FALKORDB_PORT:-6379}
+      - GRAPHITI_ENABLED=${GRAPHITI_ENABLED:-true}
     restart: unless-stopped
     networks:
       - alice-network
@@ -42,16 +44,15 @@ services:
     networks:
       - alice-network
 
-  redis:
-    image: redis:7-alpine
-    container_name: alice-redis
+  falkordb:
+    image: falkordb/falkordb:v4.4.1
+    container_name: alice-falkordb
     ports:
-      - "6379:6379"
+      - "${FALKORDB_PORT:-6379}:6379"
     volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
+      - falkordb_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -62,8 +63,8 @@ services:
 volumes:
   postgres_data:
     name: alice-postgres-data
-  redis_data:
-    name: alice-redis-data
+  falkordb_data:
+    name: alice-falkordb-data
 
 networks:
   alice-network:

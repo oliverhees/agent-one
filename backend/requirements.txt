@@ -30,5 +30,8 @@ python-multipart==0.0.*
 # Environment variables
 python-dotenv==1.0.*
 
+# Knowledge Graph
+graphiti-core[falkordb,anthropic]>=0.5,<1.0
+
 # Voice
 edge-tts==7.*

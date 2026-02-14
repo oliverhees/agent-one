@@ -30,10 +30,15 @@ class Settings(BaseSettings):
     postgres_password: str = Field(default="alice_dev_123", alias="POSTGRES_PASSWORD")
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
 
-    # Redis
-    redis_host: str = Field(default="redis", alias="REDIS_HOST")
+    # Redis (points to FalkorDB, which is Redis-compatible)
+    redis_host: str = Field(default="falkordb", alias="REDIS_HOST")
     redis_port: int = Field(default=6379, alias="REDIS_PORT")
     redis_url: str | None = Field(default=None, alias="REDIS_URL")
+
+    # FalkorDB / Graphiti
+    falkordb_host: str = Field(default="falkordb", alias="FALKORDB_HOST")
+    falkordb_port: int = Field(default=6379, alias="FALKORDB_PORT")
+    graphiti_enabled: bool = Field(default=True, alias="GRAPHITI_ENABLED")
 
     # JWT
     jwt_secret_key: str = Field(default="change-me-in-production", alias="JWT_SECRET_KEY")
@@ -89,6 +94,11 @@ class Settings(BaseSettings):
         if self.redis_url:
             return self.redis_url
         return f"redis://{self.redis_host}:{self.redis_port}/0"
+
+    @property
+    def falkordb_uri(self) -> str:
+        """Get FalkorDB connection URI for Graphiti."""
+        return f"falkor://{self.falkordb_host}:{self.falkordb_port}"
 
 
 # Global settings instance
