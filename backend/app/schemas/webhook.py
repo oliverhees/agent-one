@@ -10,7 +10,7 @@ class WebhookCreate(BaseModel):
     name: str = Field(max_length=200)
     url: str = Field(max_length=2000)
     direction: Literal["incoming", "outgoing"]
-    events: list[str] = []
+    events: list[str] = Field(default_factory=list)
 
 
 class WebhookUpdate(BaseModel):

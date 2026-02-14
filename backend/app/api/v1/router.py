@@ -21,6 +21,10 @@ from app.api.v1 import (
     wellbeing,
     briefing,
     prediction,
+    calendar,
+    reminders,
+    webhooks,
+    n8n,
 )
 
 
@@ -57,3 +61,9 @@ router.include_router(briefing.router, prefix="/briefing", tags=["Briefing"])
 
 # Phase 9: Prediction Pattern Engine routers
 router.include_router(prediction.router, prefix="/predictions", tags=["Predictions"])
+
+# Phase 10: Essential Integrations routers
+router.include_router(calendar.router, prefix="/calendar", tags=["Calendar"])
+router.include_router(reminders.router, prefix="/reminders", tags=["Reminders"])
+router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
+router.include_router(n8n.router, prefix="/n8n", tags=["n8n"])

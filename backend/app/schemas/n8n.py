@@ -10,7 +10,7 @@ class N8nWorkflowCreate(BaseModel):
     name: str = Field(max_length=200)
     description: str | None = None
     webhook_url: str = Field(max_length=2000)
-    input_schema: dict[str, Any] = {}
+    input_schema: dict[str, Any] = Field(default_factory=dict)
 
 
 class N8nWorkflowUpdate(BaseModel):
@@ -50,7 +50,7 @@ class N8nWorkflowListResponse(BaseModel):
 class N8nExecuteRequest(BaseModel):
     """Request schema for executing an n8n workflow."""
 
-    input_data: dict[str, Any] = {}
+    input_data: dict[str, Any] = Field(default_factory=dict)
 
 
 class N8nExecuteResponse(BaseModel):
@@ -58,5 +58,5 @@ class N8nExecuteResponse(BaseModel):
 
     workflow_id: str
     success: bool
-    response_data: dict[str, Any] = {}
+    response_data: dict[str, Any] = Field(default_factory=dict)
     execution_count: int
