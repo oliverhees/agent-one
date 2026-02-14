@@ -20,6 +20,7 @@ from app.api.v1 import (
     memory,
     wellbeing,
     briefing,
+    prediction,
 )
 
 
@@ -53,3 +54,6 @@ router.include_router(wellbeing.router, prefix="/wellbeing", tags=["Wellbeing"])
 
 # Phase 8: Morning Briefing routers
 router.include_router(briefing.router, prefix="/briefing", tags=["Briefing"])
+
+# Phase 9: Prediction Pattern Engine routers
+router.include_router(prediction.router, prefix="/predictions", tags=["Predictions"])
