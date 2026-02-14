@@ -293,20 +293,20 @@ Nutzt Graphiti temporale Daten + PatternAnalyzer Sliding Windows:
 ### Milestone 6: Multi-Agent & Trust System (Agent One Level 1-3)
 **Scope: LangGraph Supervisor + Progressive Autonomie**
 
-- [ ] LangGraph Supervisor Agent
-- [ ] Subagent-as-Tool Pattern Implementation
-- [ ] Email Sub-Agent (Read/Summarize/Draft)
-- [ ] Calendar Sub-Agent (Scheduling/Conflict Resolution)
-- [ ] Research Sub-Agent (Web Search/Summarize)
-- [ ] Briefing Sub-Agent (Morning Briefing Generation)
-- [ ] `TrustScore` DB Model + Migration
-- [ ] Trust Score Berechnung (per Action Type)
-- [ ] Progressive Autonomy Engine
-- [ ] Approval Gates (LangGraph `interrupt()`)
-- [ ] Approval Queue API + UI
+- [x] LangGraph Supervisor Agent
+- [x] Subagent-as-Tool Pattern Implementation
+- [x] Email Sub-Agent (Read/Summarize/Draft)
+- [x] Calendar Sub-Agent (Scheduling/Conflict Resolution)
+- [x] Research Sub-Agent (Web Search/Summarize)
+- [x] Briefing Sub-Agent (Morning Briefing Generation)
+- [x] `TrustScore` DB Model + Migration
+- [x] Trust Score Berechnung (per Action Type)
+- [x] Progressive Autonomy Engine
+- [x] Approval Gates (LangGraph `interrupt()`)
+- [x] Approval Queue API + UI
 - [ ] Expo: Approval Swipe-to-Approve
-- [ ] Agent Activity Feed (SSE)
-- [ ] Reflexion Framework (lernen aus Fehlern)
+- [x] Agent Activity Feed (SSE)
+- [x] Reflexion Framework (lernen aus Fehlern)
 
 ### Milestone 7: DSGVO & Security Hardening (Agent One Level 2)
 **Scope: Enterprise-taugliche Sicherheit**
