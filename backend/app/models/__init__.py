@@ -19,6 +19,7 @@ from app.models.user import User
 from app.models.user_settings import UserSettings
 from app.models.user_stats import UserStats
 from app.models.wellbeing_score import WellbeingScore, WellbeingZone
+from app.models.predicted_pattern import PredictedPattern, PredictionStatus
 
 __all__ = [
     "Base",
@@ -56,4 +57,6 @@ __all__ = [
     "InterventionStatus",
     "Briefing",
     "BriefingStatus",
+    "PredictedPattern",
+    "PredictionStatus",
 ]

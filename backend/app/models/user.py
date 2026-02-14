@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from app.models.user_stats import UserStats
     from app.models.briefing import Briefing
     from app.models.wellbeing_score import WellbeingScore
+    from app.models.predicted_pattern import PredictedPattern
 
 
 class User(BaseModel):
@@ -138,6 +139,12 @@ class User(BaseModel):
     )
 
     briefings: Mapped[list["Briefing"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    predicted_patterns: Mapped[list["PredictedPattern"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",
