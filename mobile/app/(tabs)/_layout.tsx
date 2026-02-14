@@ -23,6 +23,12 @@ const TAB_CONFIG: TabConfig[] = [
     icon: "analytics-outline",
     requiredModules: ["adhs", "wellness", "productivity"],
   },
+  {
+    name: "wellness",
+    title: "Wellness",
+    icon: "heart-outline",
+    requiredModules: ["wellness"],
+  },
   { name: "settings", title: "Einstellungen", icon: "settings-outline" },
 ];
 
