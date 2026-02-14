@@ -264,31 +264,31 @@ Nutzt Graphiti temporale Daten + PatternAnalyzer Sliding Windows:
 ### Milestone 4: Predictive Pattern Engine
 **Scope: Vorhersage statt nur Analyse**
 
-- [ ] `PredictedPattern` DB Model
-- [ ] Prediction Rules Engine (7 Pattern-Typen)
-- [ ] Sliding Window Trend-Analyse (7d, 30d)
-- [ ] Graphiti temporale Queries fuer Predictions
-- [ ] Confidence Scoring fuer Predictions
-- [ ] Push Notifications bei High-Confidence Predictions
-- [ ] API: predictions/active, predictions/history
-- [ ] Expo: Pattern Insights Screen
-- [ ] Expo: Prediction Notification Cards
+- [x] `PredictedPattern` DB Model
+- [x] Prediction Rules Engine (6 Pattern-Typen)
+- [x] Sliding Window Trend-Analyse (7d, 30d)
+- [x] Graphiti temporale Queries fuer Predictions (optional enrichment with graceful degradation)
+- [x] Confidence Scoring fuer Predictions (0.0-1.0, threshold 0.6)
+- [x] Push Notifications bei High-Confidence Predictions (>=0.75)
+- [x] API: predictions/active, predictions/history, predictions/resolve, predictions/run
+- [x] Expo: Pattern Insights Screen
+- [x] Expo: Prediction Cards with resolve actions (Eingetreten/Vermieden)
 
 ### Milestone 5: Essential Integrations
 **Scope: Calendar + Reminders + Webhooks**
 
-- [ ] Google Calendar OAuth 2.0 Integration (Read/Write)
-- [ ] Apple Calendar Integration (EventKit via Expo)
-- [ ] Calendar-Daten in Morning Briefing einbinden
-- [ ] Termin-Erinnerungen via Push
-- [ ] Smart Reminder System (zeit-/kontextbasiert)
-- [ ] Wiederkehrende Erinnerungen
-- [ ] Push Notification Queue mit Priority
-- [ ] Incoming Webhooks Endpoint
-- [ ] Outgoing Webhooks System
-- [ ] n8n Bridge Foundation (Workflow -> MCP Tool)
-- [ ] Expo: Calendar View Screen
-- [ ] Expo: Reminder Management
+- [x] Google Calendar OAuth 2.0 Integration (Read/Write)
+- [ ] Apple Calendar Integration (EventKit via Expo) — deferred
+- [x] Calendar-Daten in Morning Briefing einbinden
+- [x] Termin-Erinnerungen via Push
+- [x] Smart Reminder System (zeit-/kontextbasiert)
+- [x] Wiederkehrende Erinnerungen
+- [x] Push Notification Queue mit Priority
+- [x] Incoming Webhooks Endpoint
+- [x] Outgoing Webhooks System
+- [x] n8n Bridge Foundation (Workflow -> MCP Tool)
+- [x] Expo: Calendar View Screen
+- [x] Expo: Reminder Management
 
 ### Milestone 6: Multi-Agent & Trust System (Agent One Level 1-3)
 **Scope: LangGraph Supervisor + Progressive Autonomie**
