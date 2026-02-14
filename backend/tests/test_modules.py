@@ -1,6 +1,7 @@
-"""Tests for module constants and Pydantic schemas."""
+"""Tests for module constants, Pydantic schemas, and module service integration."""
 
 import pytest
+from httpx import AsyncClient
 from pydantic import ValidationError
 
 from app.core.modules import (
@@ -135,3 +136,176 @@ class TestModuleConfigUpdate:
         """ModuleConfigUpdate should accept empty config."""
         update = ModuleConfigUpdate(config={})
         assert update.config == {}
+
+
+# ===========================================================================
+# Module Service Integration Tests (via HTTP endpoints)
+# ===========================================================================
+
+class TestModuleService:
+    """Integration tests for module service methods via API endpoints."""
+
+    async def test_get_modules_returns_defaults_for_new_user(
+        self, authenticated_client: AsyncClient, test_user
+    ):
+        """GET /api/v1/settings/modules should return default modules for a new user."""
+        response = await authenticated_client.get("/api/v1/settings/modules")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "core" in data["active_modules"]
+        assert "adhs" in data["active_modules"]
+        assert len(data["available_modules"]) == 4
+
+    async def test_get_modules_shows_active_status(
+        self, authenticated_client: AsyncClient, test_user
+    ):
+        """Active flag should be True for active modules, False for inactive."""
+        response = await authenticated_client.get("/api/v1/settings/modules")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        modules_by_name = {m["name"]: m for m in data["available_modules"]}
+
+        assert modules_by_name["core"]["active"] is True
+        assert modules_by_name["adhs"]["active"] is True
+        assert modules_by_name["wellness"]["active"] is False
+        assert modules_by_name["productivity"]["active"] is False
+
+    async def test_activate_wellness_module(
+        self, authenticated_client: AsyncClient, test_user
+    ):
+        """PUT /api/v1/settings/modules with wellness should activate it."""
+        response = await authenticated_client.put(
+            "/api/v1/settings/modules",
+            json={"active_modules": ["core", "adhs", "wellness"]},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "wellness" in data["active_modules"]
+        modules_by_name = {m["name"]: m for m in data["available_modules"]}
+        assert modules_by_name["wellness"]["active"] is True
+
+    async def test_deactivate_adhs_module(
+        self, authenticated_client: AsyncClient, test_user
+    ):
+        """PUT /api/v1/settings/modules with only core should deactivate adhs."""
+        response = await authenticated_client.put(
+            "/api/v1/settings/modules",
+            json={"active_modules": ["core"]},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "adhs" not in data["active_modules"]
+        modules_by_name = {m["name"]: m for m in data["available_modules"]}
+        assert modules_by_name["adhs"]["active"] is False
+
+    async def test_cannot_deactivate_core(
+        self, authenticated_client: AsyncClient, test_user
+    ):
+        """PUT /api/v1/settings/modules without core should auto-add core."""
+        response = await authenticated_client.put(
+            "/api/v1/settings/modules",
+            json={"active_modules": ["adhs"]},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # core should be auto-added by the schema validator
+        assert "core" in data["active_modules"]
+
+    async def test_invalid_module_name_rejected(
+        self, authenticated_client: AsyncClient, test_user
+    ):
+        """PUT /api/v1/settings/modules with unknown module should return 422."""
+        response = await authenticated_client.put(
+            "/api/v1/settings/modules",
+            json={"active_modules": ["core", "nonexistent"]},
+        )
+
+        assert response.status_code == 422
+
+    async def test_update_module_config(
+        self, authenticated_client: AsyncClient, test_user
+    ):
+        """PUT /api/v1/settings/modules/adhs/config should update config."""
+        response = await authenticated_client.put(
+            "/api/v1/settings/modules/adhs/config",
+            json={"config": {"nudge_intensity": "high"}},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["name"] == "adhs"
+        assert data["config"]["nudge_intensity"] == "high"
+
+    async def test_update_config_preserves_existing_keys(
+        self, authenticated_client: AsyncClient, test_user
+    ):
+        """Updating one config key should preserve other existing keys."""
+        # Set first key
+        await authenticated_client.put(
+            "/api/v1/settings/modules/adhs/config",
+            json={"config": {"nudge_intensity": "low"}},
+        )
+
+        # Set different key
+        response = await authenticated_client.put(
+            "/api/v1/settings/modules/adhs/config",
+            json={"config": {"auto_breakdown": False}},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Both keys should be present
+        assert data["config"]["nudge_intensity"] == "low"
+        assert data["config"]["auto_breakdown"] is False
+
+    async def test_update_config_unknown_module_404(
+        self, authenticated_client: AsyncClient, test_user
+    ):
+        """PUT /api/v1/settings/modules/nonexistent/config should return 404."""
+        response = await authenticated_client.put(
+            "/api/v1/settings/modules/nonexistent/config",
+            json={"config": {"key": "value"}},
+        )
+
+        assert response.status_code == 404
+
+    async def test_modules_unauthorized(self, client: AsyncClient):
+        """GET /api/v1/settings/modules without auth should return 403."""
+        response = await client.get("/api/v1/settings/modules")
+        assert response.status_code == 403
+
+    async def test_existing_adhs_settings_preserved(
+        self, authenticated_client: AsyncClient, test_user
+    ):
+        """Activating a new module should not affect existing ADHS settings."""
+        # Update ADHS settings first
+        await authenticated_client.put(
+            "/api/v1/settings/adhs",
+            json={"nudge_intensity": "high", "focus_timer_minutes": 15},
+        )
+
+        # Activate wellness module
+        await authenticated_client.put(
+            "/api/v1/settings/modules",
+            json={"active_modules": ["core", "adhs", "wellness"]},
+        )
+
+        # Verify ADHS settings are untouched
+        response = await authenticated_client.get("/api/v1/settings/adhs")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["nudge_intensity"] == "high"
+        assert data["focus_timer_minutes"] == 15
