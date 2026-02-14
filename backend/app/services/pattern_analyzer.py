@@ -50,6 +50,50 @@ class PatternAnalyzer:
             "mood_trend": mood_trend,
         }
 
+    async def get_multi_metric_trends(
+        self, user_id: str | UUID, days: int = 7
+    ) -> dict[str, Any]:
+        """Get trends for ALL three metrics (mood, energy, focus)."""
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+        stmt = select(
+            func.avg(PatternLog.mood_score).label("avg_mood"),
+            func.avg(PatternLog.energy_level).label("avg_energy"),
+            func.avg(PatternLog.focus_score).label("avg_focus"),
+            func.count(PatternLog.id).label("total"),
+            func.min(PatternLog.mood_score).label("min_mood"),
+            func.max(PatternLog.mood_score).label("max_mood"),
+            func.min(PatternLog.energy_level).label("min_energy"),
+            func.max(PatternLog.energy_level).label("max_energy"),
+            func.min(PatternLog.focus_score).label("min_focus"),
+            func.max(PatternLog.focus_score).label("max_focus"),
+        ).where(
+            PatternLog.user_id == str(user_id),
+            PatternLog.created_at >= cutoff,
+        )
+
+        result = (await self.db.execute(stmt)).one()
+
+        mood_trend = await self._calculate_trend(user_id, days, "mood_score")
+        energy_trend = await self._calculate_trend(user_id, days, "energy_level")
+        focus_trend = await self._calculate_trend(user_id, days, "focus_score")
+
+        return {
+            "avg_mood": round(float(result.avg_mood or 0), 2),
+            "avg_energy": round(float(result.avg_energy or 0), 2),
+            "avg_focus": round(float(result.avg_focus or 0), 2),
+            "total_conversations": int(result.total or 0),
+            "min_mood": round(float(result.min_mood or 0), 2),
+            "max_mood": round(float(result.max_mood or 0), 2),
+            "min_energy": round(float(result.min_energy or 0), 2),
+            "max_energy": round(float(result.max_energy or 0), 2),
+            "min_focus": round(float(result.min_focus or 0), 2),
+            "max_focus": round(float(result.max_focus or 0), 2),
+            "mood_trend": mood_trend,
+            "energy_trend": energy_trend,
+            "focus_trend": focus_trend,
+        }
+
     async def _calculate_trend(
         self, user_id: str | UUID, days: int, column: str
     ) -> str:
