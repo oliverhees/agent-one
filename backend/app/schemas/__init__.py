@@ -60,6 +60,12 @@ from app.schemas.task_breakdown import (
     BreakdownSuggestedSubtask,
 )
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
+from app.schemas.modules import (
+    ModuleConfigUpdate,
+    ModuleInfoResponse,
+    ModulesResponse,
+    ModulesUpdate,
+)
 
 __all__ = [
     # Auth
@@ -122,4 +128,9 @@ __all__ = [
     "BreakdownSuggestedSubtask",
     "BreakdownConfirmRequest",
     "BreakdownConfirmResponse",
+    # Phase 6: Modules
+    "ModuleInfoResponse",
+    "ModulesResponse",
+    "ModulesUpdate",
+    "ModuleConfigUpdate",
 ]

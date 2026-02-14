@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import attributes
 
 from app.core.encryption import encrypt_value, decrypt_value, mask_api_key
+from app.core.modules import ALL_MODULES, DEFAULT_ACTIVE_MODULES, ALWAYS_ACTIVE_MODULES, VALID_MODULE_NAMES
 from app.models.user_settings import UserSettings, DEFAULT_SETTINGS
+from app.schemas.modules import ModuleInfoResponse, ModulesResponse, ModulesUpdate, ModuleConfigUpdate
 from app.schemas.settings import (
     ADHSSettingsResponse,
     ADHSSettingsUpdate,
@@ -244,4 +246,109 @@ class SettingsService:
         return VoiceProviderResponse(
             stt_provider=current_settings.get("stt_provider", "deepgram"),
             tts_provider=current_settings.get("tts_provider", "elevenlabs"),
+        )
+
+    # -----------------------------------------------------------------------
+    # Module management
+    # -----------------------------------------------------------------------
+
+    async def get_modules(self, user_id: UUID) -> ModulesResponse:
+        """Get all modules with their active/config state for a user.
+
+        Args:
+            user_id: User ID
+
+        Returns:
+            ModulesResponse with active_modules list and available_modules details.
+        """
+        user_settings = await self._get_or_create_settings(user_id)
+        merged = {**DEFAULT_SETTINGS, **user_settings.settings}
+
+        active_modules: list[str] = merged.get("active_modules", DEFAULT_ACTIVE_MODULES)
+        module_configs: dict = merged.get("module_configs", {})
+
+        available: list[ModuleInfoResponse] = []
+        for name, meta in ALL_MODULES.items():
+            # Effective config = default_config merged with user overrides
+            effective_config = {**meta["default_config"], **module_configs.get(name, {})}
+            available.append(
+                ModuleInfoResponse(
+                    name=name,
+                    label=meta["label"],
+                    icon=meta["icon"],
+                    description=meta["description"],
+                    active=name in active_modules,
+                    config=effective_config,
+                )
+            )
+
+        return ModulesResponse(
+            active_modules=active_modules,
+            available_modules=available,
+        )
+
+    async def update_modules(self, user_id: UUID, data: ModulesUpdate) -> ModulesResponse:
+        """Update which modules are active for a user.
+
+        Args:
+            user_id: User ID
+            data: ModulesUpdate with the desired active_modules list.
+
+        Returns:
+            ModulesResponse reflecting the new state.
+        """
+        user_settings = await self._get_or_create_settings(user_id)
+        current = {**DEFAULT_SETTINGS, **user_settings.settings}
+
+        current["active_modules"] = data.active_modules
+
+        user_settings.settings = current
+        attributes.flag_modified(user_settings, "settings")
+        await self.db.flush()
+
+        return await self.get_modules(user_id)
+
+    async def update_module_config(
+        self, user_id: UUID, module_name: str, data: ModuleConfigUpdate
+    ) -> ModuleInfoResponse | None:
+        """Update configuration for a single module.
+
+        Args:
+            user_id: User ID
+            module_name: Name of the module to configure.
+            data: ModuleConfigUpdate with config key-value pairs.
+
+        Returns:
+            ModuleInfoResponse for the updated module, or None if module_name
+            is not recognised (caller should return 404).
+        """
+        if module_name not in VALID_MODULE_NAMES:
+            return None
+
+        user_settings = await self._get_or_create_settings(user_id)
+        merged = {**DEFAULT_SETTINGS, **user_settings.settings}
+
+        module_configs: dict = merged.get("module_configs", {})
+        existing_config = module_configs.get(module_name, {})
+
+        # Merge: default_config + existing overrides + new overrides
+        meta = ALL_MODULES[module_name]
+        effective_config = {**meta["default_config"], **existing_config, **data.config}
+
+        module_configs[module_name] = effective_config
+        merged["module_configs"] = module_configs
+
+        user_settings.settings = merged
+        attributes.flag_modified(user_settings, "settings")
+        await self.db.flush()
+
+        active_modules: list[str] = merged.get("active_modules", DEFAULT_ACTIVE_MODULES)
+
+        return ModuleInfoResponse(
+            name=module_name,
+            label=meta["label"],
+            icon=meta["icon"],
+            description=meta["description"],
+            active=module_name in active_modules,
+            config=effective_config,
         )

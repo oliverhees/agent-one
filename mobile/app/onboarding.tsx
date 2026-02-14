@@ -9,13 +9,15 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../services/api";
+import { modulesApi } from "../services/modules";
 import { useOnboardingStore } from "../stores/onboardingStore";
 
-type OnboardingStep = "welcome" | "name" | "settings" | "complete";
+type OnboardingStep = "welcome" | "modules" | "name" | "settings" | "complete";
 
 const FOCUS_TIMER_OPTIONS = [
   { value: 15, label: "15 Min" },
@@ -30,6 +32,27 @@ const NUDGE_INTENSITY_OPTIONS = [
   { value: "high", label: "Bestimmt", icon: "volume-high" as const },
 ];
 
+const MODULE_OPTIONS = [
+  {
+    name: "adhs",
+    label: "ADHS-Coaching",
+    icon: "bulb-outline" as const,
+    description: "Pattern-Erkennung, Nudges, Task-Breakdown und Gamification",
+  },
+  {
+    name: "wellness",
+    label: "Wellness & Guardian Angel",
+    icon: "heart-outline" as const,
+    description: "Wellbeing-Score, Energie-Tracking und proaktive Interventionen",
+  },
+  {
+    name: "productivity",
+    label: "Produktivitaet & Planung",
+    icon: "calendar-outline" as const,
+    description: "Morning Briefing, adaptive Tagesplanung",
+  },
+];
+
 export default function OnboardingScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -40,6 +63,7 @@ export default function OnboardingScreen() {
   const [focusTimerMinutes, setFocusTimerMinutes] = useState(25);
   const [nudgeIntensity, setNudgeIntensity] = useState<"low" | "medium" | "high">("medium");
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedModules, setSelectedModules] = useState<string[]>(["adhs"]);
 
   const markOnboardingComplete = useOnboardingStore(
     (s) => s.markOnboardingComplete
@@ -48,6 +72,7 @@ export default function OnboardingScreen() {
   const handleCompleteOnboarding = async () => {
     setIsLoading(true);
     try {
+      await modulesApi.updateModules(["core", ...selectedModules]);
       await api.post("/settings/onboarding", {
         display_name: displayName.trim() || null,
         focus_timer_minutes: focusTimerMinutes,
@@ -92,7 +117,7 @@ export default function OnboardingScreen() {
         Dein persönlicher ADHS-Coach. Lass uns gemeinsam starten!
       </Text>
       <TouchableOpacity
-        onPress={() => setStep("name")}
+        onPress={() => setStep("modules")}
         className="bg-primary-600 px-8 py-4 rounded-lg w-full max-w-xs"
       >
         <Text className="text-white text-center text-lg font-semibold">
@@ -100,6 +125,92 @@ export default function OnboardingScreen() {
         </Text>
       </TouchableOpacity>
     </View>
+  );
+
+  const toggleModule = (moduleName: string) => {
+    setSelectedModules((prev) =>
+      prev.includes(moduleName)
+        ? prev.filter((m) => m !== moduleName)
+        : [...prev, moduleName]
+    );
+  };
+
+  const renderModules = () => (
+    <ScrollView
+      className="flex-1 px-8 pt-12"
+      contentContainerStyle={{ paddingBottom: 40 }}
+      showsVerticalScrollIndicator={false}
+    >
+      <Text
+        className={`text-3xl font-bold mb-2 text-center ${
+          isDark ? "text-white" : "text-gray-900"
+        }`}
+      >
+        Was soll Alice fuer dich tun?
+      </Text>
+      <Text
+        className={`text-base text-center mb-8 ${
+          isDark ? "text-gray-400" : "text-gray-500"
+        }`}
+      >
+        Du kannst Module jederzeit in den Einstellungen aendern.
+      </Text>
+
+      {MODULE_OPTIONS.map((mod) => {
+        const isActive = selectedModules.includes(mod.name);
+        return (
+          <TouchableOpacity
+            key={mod.name}
+            onPress={() => toggleModule(mod.name)}
+            className={`flex-row items-center px-4 py-4 rounded-lg mb-3 border-2 ${
+              isActive
+                ? "border-primary-600 bg-primary-600/10"
+                : isDark
+                ? "bg-gray-800 border-gray-700"
+                : "bg-white border-gray-300"
+            }`}
+          >
+            <Ionicons
+              name={mod.icon}
+              size={28}
+              color={isActive ? "#0284c7" : isDark ? "#9ca3af" : "#6b7280"}
+              style={{ marginRight: 12 }}
+            />
+            <View className="flex-1 mr-3">
+              <Text
+                className={`text-lg font-bold ${
+                  isDark ? "text-white" : "text-gray-900"
+                }`}
+              >
+                {mod.label}
+              </Text>
+              <Text
+                className={`text-sm ${
+                  isDark ? "text-gray-400" : "text-gray-500"
+                }`}
+              >
+                {mod.description}
+              </Text>
+            </View>
+            <Switch
+              value={isActive}
+              onValueChange={() => toggleModule(mod.name)}
+              trackColor={{ false: "#767577", true: "#0284c7" }}
+              thumbColor={isActive ? "#ffffff" : "#f4f3f4"}
+            />
+          </TouchableOpacity>
+        );
+      })}
+
+      <TouchableOpacity
+        onPress={() => setStep("name")}
+        className="bg-primary-600 px-8 py-4 rounded-lg mt-4"
+      >
+        <Text className="text-white text-center text-lg font-semibold">
+          Weiter
+        </Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 
   const renderName = () => (
@@ -303,8 +414,8 @@ export default function OnboardingScreen() {
       {step !== "welcome" && (
         <View className="px-8 pt-12 pb-4">
           <View className="flex-row gap-2">
-            {["name", "settings", "complete"].map((s, idx) => {
-              const currentIdx = ["name", "settings", "complete"].indexOf(step);
+            {["modules", "name", "settings", "complete"].map((s, idx) => {
+              const currentIdx = ["modules", "name", "settings", "complete"].indexOf(step);
               const isActive = idx <= currentIdx;
               return (
                 <View
@@ -320,6 +431,7 @@ export default function OnboardingScreen() {
       )}
 
       {step === "welcome" && renderWelcome()}
+      {step === "modules" && renderModules()}
       {step === "name" && renderName()}
       {step === "settings" && renderSettings()}
       {step === "complete" && renderComplete()}

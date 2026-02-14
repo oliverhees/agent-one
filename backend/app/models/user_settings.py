@@ -29,6 +29,8 @@ DEFAULT_SETTINGS = {
     "api_keys": {},  # Encrypted API keys: {"anthropic": "encrypted...", "elevenlabs": "encrypted...", "deepgram": "encrypted..."}
     "stt_provider": "deepgram",  # Default STT provider
     "tts_provider": "elevenlabs",  # Default TTS provider
+    "active_modules": ["core", "adhs"],  # Default active modules
+    "module_configs": {},  # Per-module configuration overrides
 }
 
 

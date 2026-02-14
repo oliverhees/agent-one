@@ -1,6 +1,6 @@
 """ADHS settings endpoints."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +9,7 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.core.rate_limit import standard_rate_limit
 from app.models.user import User
+from app.schemas.modules import ModulesResponse, ModulesUpdate, ModuleConfigUpdate, ModuleInfoResponse
 from app.schemas.settings import (
     ADHSSettingsResponse,
     ADHSSettingsUpdate,
@@ -182,3 +183,59 @@ async def update_voice_providers(
     """
     service = SettingsService(db)
     return await service.update_voice_providers(current_user.id, data)
+
+
+# ===========================================================================
+# Modules (GET/PUT /api/v1/settings/modules)
+# ===========================================================================
+
+
+@router.get(
+    "/modules",
+    response_model=ModulesResponse,
+    summary="Get module settings",
+    dependencies=[Depends(standard_rate_limit)],
+)
+async def get_modules(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all available modules and their active/config state for the authenticated user."""
+    service = SettingsService(db)
+    return await service.get_modules(current_user.id)
+
+
+@router.put(
+    "/modules",
+    response_model=ModulesResponse,
+    summary="Update active modules",
+    dependencies=[Depends(standard_rate_limit)],
+)
+async def update_modules(
+    data: ModulesUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update which modules are active for the authenticated user."""
+    service = SettingsService(db)
+    return await service.update_modules(current_user.id, data)
+
+
+@router.put(
+    "/modules/{module_name}/config",
+    response_model=ModuleInfoResponse,
+    summary="Update module configuration",
+    dependencies=[Depends(standard_rate_limit)],
+)
+async def update_module_config(
+    module_name: str,
+    data: ModuleConfigUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update configuration for a single module."""
+    service = SettingsService(db)
+    result = await service.update_module_config(current_user.id, module_name, data)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Module '{module_name}' not found")
+    return result

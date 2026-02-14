@@ -222,13 +222,13 @@ Nutzt Graphiti temporale Daten + PatternAnalyzer Sliding Windows:
 ### Milestone 1: Foundation & Module System
 **Scope: Rebranding + Modul-Architektur**
 
-- [ ] Module System in UserSettings (active_modules, module_configs)
-- [ ] Module Selection Onboarding Screen
-- [ ] Dynamic Tab-Bar basierend auf aktiven Modulen
-- [ ] Settings Screen fuer Module-Management (an/aus Toggle)
-- [ ] API: `GET/PUT /settings/modules`
+- [x] Module System in UserSettings (active_modules, module_configs)
+- [x] Module Selection Onboarding Screen
+- [x] Dynamic Tab-Bar basierend auf aktiven Modulen
+- [x] Settings Screen fuer Module-Management (an/aus Toggle)
+- [x] API: `GET/PUT /settings/modules`
 - [ ] ARCHITECTURE.md Update fuer Alice
-- [ ] Linear Project + Milestones + Epics + Tasks komplett
+- [x] Linear Project + Milestones + Epics + Tasks komplett
 
 ### Milestone 2: Guardian Angel & Wellness Module
 **Scope: Wellbeing Score + ADHS Interventionen**
