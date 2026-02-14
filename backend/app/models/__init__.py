@@ -13,6 +13,7 @@ from app.models.personality_template import PersonalityTemplate
 from app.models.refresh_token import RefreshToken
 from app.models.task import Task, TaskPriority, TaskSource, TaskStatus
 from app.models.user import User
+from app.models.pattern_log import PatternLog
 from app.models.user_settings import UserSettings
 from app.models.user_stats import UserStats
 
@@ -42,6 +43,7 @@ __all__ = [
     "UserAchievement",
     "NudgeHistory",
     "NudgeType",
+    "PatternLog",
     "UserSettings",
     "UserStats",
 ]

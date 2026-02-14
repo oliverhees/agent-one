@@ -14,6 +14,13 @@ from app.schemas.chat import (
     MessageResponse,
 )
 from app.schemas.dashboard import DashboardSummaryResponse
+from app.schemas.memory import (
+    ConversationAnalysis,
+    MemoryExportResponse,
+    MemorySettingsUpdate,
+    MemoryStatusResponse,
+    PatternLogResponse,
+)
 from app.schemas.gamification import (
     AchievementListResponse,
     AchievementResponse,
@@ -101,6 +108,12 @@ __all__ = [
     "NudgeHistoryResponse",
     # Phase 3: Dashboard
     "DashboardSummaryResponse",
+    # Phase 5: Memory
+    "ConversationAnalysis",
+    "PatternLogResponse",
+    "MemoryStatusResponse",
+    "MemoryExportResponse",
+    "MemorySettingsUpdate",
     # Phase 3: Settings
     "ADHSSettingsResponse",
     "ADHSSettingsUpdate",
