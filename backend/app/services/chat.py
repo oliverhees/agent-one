@@ -1,5 +1,6 @@
 """Chat service for managing conversations and messages."""
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -1046,7 +1047,7 @@ class ChatService:
                 return tag.split(":", 2)[2]
         return "medium"
 
-    async def _build_system_prompt(self, user_id: UUID) -> str:
+    async def _build_system_prompt(self, user_id: UUID, user_message: str = "") -> str:
         """Build a dynamic system prompt with user context."""
         from app.services.personality import PersonalityService
         from app.services.settings import SettingsService
@@ -1221,7 +1222,28 @@ class ChatService:
             "- Emojis fuer Lesbarkeit nutzen"
         )
 
-        return "\n\n".join(parts)
+        base_prompt = "\n\n".join(parts)
+
+        # Enrich with memory context (Phase 5)
+        if user_message:
+            try:
+                from app.services.graphiti_client import get_graphiti_client
+                from app.services.memory import MemoryService
+                from app.services.context_builder import ContextBuilder
+
+                graphiti = get_graphiti_client()
+                if graphiti.enabled:
+                    memory_service = MemoryService(self.db, graphiti)
+                    builder = ContextBuilder(memory_service)
+                    base_prompt = await builder.enrich(
+                        base_prompt=base_prompt,
+                        user_id=str(user_id),
+                        user_message=user_message,
+                    )
+            except Exception:
+                logger.warning("Memory enrichment failed, using base prompt")
+
+        return base_prompt
 
     async def send_message_simple(
         self,
@@ -1269,7 +1291,7 @@ class ChatService:
         tool_executor = await self._create_tool_executor(user_id)
 
         # Build dynamic system prompt with user context
-        system_prompt = await self._build_system_prompt(user_id)
+        system_prompt = await self._build_system_prompt(user_id, user_message=content)
 
         # Get full response with tool use
         response_text = await self.ai_service.get_response_with_tools(
@@ -1284,6 +1306,29 @@ class ChatService:
             role=MessageRole.ASSISTANT,
             content=response_text,
         )
+
+        # Process episode async for memory system (Phase 5)
+        try:
+            from app.services.graphiti_client import get_graphiti_client
+            from app.services.memory import MemoryService
+
+            graphiti = get_graphiti_client()
+            if graphiti.enabled:
+                memory_service = MemoryService(self.db, graphiti)
+                messages_for_analysis = [
+                    {"role": m.role.value, "content": m.content}
+                    for m in messages
+                ] + [
+                    {"role": "user", "content": content},
+                    {"role": "assistant", "content": response_text},
+                ]
+                asyncio.create_task(
+                    self._process_episode_background(
+                        memory_service, str(user_id), str(conversation_id), messages_for_analysis
+                    )
+                )
+        except Exception:
+            logger.warning("Failed to schedule episode processing")
 
         return response_text
 
@@ -1334,7 +1379,7 @@ class ChatService:
         tool_executor = await self._create_tool_executor(user_id)
 
         # Build dynamic system prompt with user context
-        system_prompt = await self._build_system_prompt(user_id)
+        system_prompt = await self._build_system_prompt(user_id, user_message=user_message)
 
         # Get full response with tool use
         response_text = await self.ai_service.get_response_with_tools(
@@ -1351,3 +1396,16 @@ class ChatService:
             for i, word in enumerate(words):
                 if word:
                     yield word + (" " if i < len(words) - 1 else "")
+
+        # TODO: Add episode processing for streaming path
+        # (needs to be triggered after all chunks are yielded)
+
+    async def _process_episode_background(
+        self, memory_service, user_id: str, conversation_id: str, messages: list[dict]
+    ) -> None:
+        """Process conversation episode in background."""
+        try:
+            await memory_service.process_episode(user_id, conversation_id, messages)
+            await self.db.commit()
+        except Exception:
+            logger.exception("Background episode processing failed for conversation %s", conversation_id)

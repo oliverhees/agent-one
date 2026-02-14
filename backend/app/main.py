@@ -28,6 +28,23 @@ async def lifespan(app: FastAPI):
     await init_db()
     print("Database connection initialized")
 
+    # Initialize Graphiti knowledge graph
+    if settings.graphiti_enabled:
+        from app.services.graphiti_client import GraphitiClient
+        import app.services.graphiti_client as gc_module
+
+        client = GraphitiClient(
+            uri=settings.falkordb_uri,
+            enabled=True,
+        )
+        await client.initialize()
+        gc_module.graphiti_client = client
+        print("Graphiti knowledge graph initialized")
+    else:
+        import app.services.graphiti_client as gc_module
+        gc_module.graphiti_client = GraphitiClient(enabled=False)
+        print("Graphiti knowledge graph disabled")
+
     # Start background scheduler (skip in test environment)
     scheduler_task = None
     if settings.app_env != "test":
@@ -47,6 +64,12 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
         print("Background scheduler stopped")
+
+    # Close Graphiti
+    import app.services.graphiti_client as gc_module
+    if gc_module.graphiti_client:
+        await gc_module.graphiti_client.close()
+        print("Graphiti connection closed")
 
     await close_db()
     print("Database connection closed")
