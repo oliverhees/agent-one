@@ -72,6 +72,13 @@ from app.schemas.wellbeing import (
     WellbeingHistoryResponse,
     WellbeingScoreResponse,
 )
+from app.schemas.briefing import (  # noqa: F401
+    BriefingResponse,
+    BriefingHistoryResponse,
+    BriefingTaskItem,
+    BrainDumpRequest,
+    BrainDumpResponse,
+)
 
 __all__ = [
     # Auth
@@ -144,4 +151,10 @@ __all__ = [
     "WellbeingHistoryResponse",
     "InterventionResponse",
     "InterventionAction",
+    # Phase 8: Briefing
+    "BriefingResponse",
+    "BriefingHistoryResponse",
+    "BriefingTaskItem",
+    "BrainDumpRequest",
+    "BrainDumpResponse",
 ]
