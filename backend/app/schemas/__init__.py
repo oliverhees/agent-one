@@ -79,6 +79,11 @@ from app.schemas.briefing import (  # noqa: F401
     BrainDumpRequest,
     BrainDumpResponse,
 )
+from app.schemas.prediction import (
+    PredictionListResponse,
+    PredictionResolveRequest,
+    PredictionResponse,
+)
 
 __all__ = [
     # Auth
@@ -157,4 +162,8 @@ __all__ = [
     "BriefingTaskItem",
     "BrainDumpRequest",
     "BrainDumpResponse",
+    # Phase 9: Predictions
+    "PredictionResponse",
+    "PredictionListResponse",
+    "PredictionResolveRequest",
 ]
