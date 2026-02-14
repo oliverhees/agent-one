@@ -1432,3 +1432,46 @@ class ChatService:
                 await db.commit()
         except Exception:
             logger.exception("Background episode processing failed for conversation %s", conversation_id)
+
+    async def get_ai_response_langgraph(
+        self, user_id: UUID, messages: list[dict], system_prompt: str
+    ) -> str:
+        """Get AI response via LangGraph supervisor (feature-flagged)."""
+        from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+        from app.agents.supervisor import create_agent
+
+        # Convert messages to LangChain format
+        lc_messages = []
+        for msg in messages:
+            if msg["role"] == "user":
+                content = msg["content"] if isinstance(msg["content"], str) else str(msg["content"])
+                lc_messages.append(HumanMessage(content=content))
+            elif msg["role"] == "assistant":
+                content = msg["content"] if isinstance(msg["content"], str) else str(msg["content"])
+                lc_messages.append(AIMessage(content=content))
+
+        agent = create_agent()
+        state = {
+            "messages": lc_messages,
+            "user_id": str(user_id),
+            "next_agent": None,
+            "agent_plan": [],
+            "trust_level": 1,
+            "requires_approval": False,
+            "pending_action": None,
+            "agent_results": [],
+            "current_agent": None,
+            "error": None,
+            "memory_context": None,
+            "user_preferences": {},
+            "system_prompt": system_prompt,
+        }
+
+        config = {"configurable": {"thread_id": f"user_{user_id}"}}
+        result = await agent.ainvoke(state, config=config)
+
+        # Extract final response
+        if result.get("messages"):
+            last = result["messages"][-1]
+            return last.content if hasattr(last, "content") else str(last)
+        return "Keine Antwort vom Agent-System."
