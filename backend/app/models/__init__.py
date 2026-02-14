@@ -4,6 +4,7 @@ from app.models.base import Base, BaseModel
 from app.models.achievement import Achievement, AchievementCategory, UserAchievement
 from app.models.brain_embedding import BrainEmbedding
 from app.models.brain_entry import BrainEntry, BrainEntryType, EmbeddingStatus
+from app.models.briefing import Briefing, BriefingStatus
 from app.models.conversation import Conversation
 from app.models.intervention import Intervention, InterventionStatus, InterventionType
 from app.models.mentioned_item import MentionedItem, MentionedItemStatus, MentionedItemType
@@ -53,4 +54,6 @@ __all__ = [
     "Intervention",
     "InterventionType",
     "InterventionStatus",
+    "Briefing",
+    "BriefingStatus",
 ]
