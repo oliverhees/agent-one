@@ -54,6 +54,15 @@ ALL_MODULES: dict[str, dict[str, Any]] = {
             "max_daily_tasks": 3,
         },
     },
+    "integrations": {
+        "label": "Integrationen",
+        "icon": "link-outline",
+        "description": "Google Calendar, Smart Reminders, Webhooks und n8n Workflows",
+        "default_config": {
+            "calendar_sync_enabled": True,
+            "reminder_notifications": True,
+        },
+    },
 }
 
 # ---------------------------------------------------------------------------

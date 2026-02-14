@@ -196,6 +196,18 @@ async def _process_user(user_id: UUID, token: str, settings: dict) -> None:
     except Exception:
         logger.exception("Prediction engine error for user %s", user_id)
 
+    # 7. Calendar sync (if integrations module active)
+    try:
+        await _process_calendar_sync(user_id, settings)
+    except Exception:
+        logger.exception("Calendar sync error for user %s", user_id)
+
+    # 8. Reminder processing (if integrations module active)
+    try:
+        await _process_reminders(user_id, settings)
+    except Exception:
+        logger.exception("Reminder processing error for user %s", user_id)
+
 
 async def _process_wellbeing_check(user_id: UUID, settings: dict) -> None:
     """Run periodic wellbeing check if wellness module is active."""
@@ -317,6 +329,97 @@ async def _process_predictions(user_id: UUID, settings: dict) -> None:
                             data={"type": "prediction", "id": pred["id"]},
                         )
                     )
+
+
+async def _process_calendar_sync(user_id: UUID, settings: dict) -> None:
+    """Sync calendar events if integrations module is active."""
+    active_modules = settings.get("active_modules", ["core", "adhs"])
+    if "integrations" not in active_modules:
+        return
+
+    # Only sync every 30 minutes (6 ticks)
+    if not hasattr(_process_calendar_sync, "_tick_count"):
+        _process_calendar_sync._tick_count = {}
+    count = _process_calendar_sync._tick_count.get(str(user_id), 0)
+    _process_calendar_sync._tick_count[str(user_id)] = count + 1
+    if count % 6 != 0:
+        return
+
+    async with AsyncSessionLocal() as db:
+        from app.services.calendar import CalendarService
+        service = CalendarService(db)
+        status = await service.get_connection_status(str(user_id))
+        if not status["connected"]:
+            return
+        events = await service.sync_events(str(user_id))
+        await db.commit()
+        if events:
+            logger.info("Calendar sync: %d events for user %s", len(events), user_id)
+
+
+async def _process_reminders(user_id: UUID, settings: dict) -> None:
+    """Process pending reminders and send push notifications."""
+    active_modules = settings.get("active_modules", ["core", "adhs"])
+    if "integrations" not in active_modules:
+        return
+
+    from app.models.reminder import Reminder, ReminderStatus, ReminderRecurrence
+    from datetime import datetime, timezone, timedelta
+
+    async with AsyncSessionLocal() as db:
+        now = datetime.now(timezone.utc)
+        stmt = select(Reminder).where(
+            Reminder.user_id == user_id,
+            Reminder.status == ReminderStatus.PENDING,
+            Reminder.remind_at <= now,
+        )
+        result = await db.execute(stmt)
+        due_reminders = result.scalars().all()
+
+        token = settings.get("expo_push_token")
+
+        for reminder in due_reminders:
+            if token:
+                await NotificationService.send_notification(
+                    PushNotification(
+                        to=token,
+                        title="Erinnerung",
+                        body=reminder.title,
+                        data={"type": "reminder", "id": str(reminder.id)},
+                    )
+                )
+
+            reminder.status = ReminderStatus.SENT
+
+            # Create next occurrence for recurring reminders
+            if reminder.recurrence:
+                next_at = _calculate_next_occurrence(reminder.remind_at, reminder.recurrence)
+                if reminder.recurrence_end is None or next_at <= reminder.recurrence_end:
+                    new_reminder = Reminder(
+                        user_id=reminder.user_id,
+                        title=reminder.title,
+                        description=reminder.description,
+                        remind_at=next_at,
+                        source=reminder.source,
+                        recurrence=reminder.recurrence,
+                        recurrence_end=reminder.recurrence_end,
+                        linked_task_id=reminder.linked_task_id,
+                    )
+                    db.add(new_reminder)
+
+        await db.commit()
+
+
+def _calculate_next_occurrence(current: datetime, recurrence: str) -> datetime:
+    """Calculate the next occurrence for a recurring reminder."""
+    from datetime import timedelta
+    if recurrence == "daily":
+        return current + timedelta(days=1)
+    elif recurrence == "weekly":
+        return current + timedelta(weeks=1)
+    elif recurrence == "monthly":
+        return current + timedelta(days=30)
+    return current + timedelta(days=1)
 
 
 def _is_quiet_hours(now: datetime, start_str: str, end_str: str) -> bool:
