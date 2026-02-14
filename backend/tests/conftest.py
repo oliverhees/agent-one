@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from sqlalchemy.pool import NullPool
 
 # Override database URL BEFORE importing app modules
-os.environ["DATABASE_URL"] = "postgresql+asyncpg://alice:alice_dev_123@localhost:5432/alice_test"
+os.environ["DATABASE_URL"] = "postgresql+asyncpg://alice:alice_dev_123@localhost:5434/alice_test"
 os.environ["APP_ENV"] = "test"
 os.environ["DEBUG"] = "false"
 
@@ -21,7 +21,7 @@ from app.core.rate_limit import auth_rate_limit, chat_rate_limit, standard_rate_
 
 
 # Test database URL
-TEST_DATABASE_URL = "postgresql+asyncpg://alice:alice_dev_123@localhost:5432/alice_test"
+TEST_DATABASE_URL = "postgresql+asyncpg://alice:alice_dev_123@localhost:5434/alice_test"
 
 
 @pytest.fixture(scope="session")

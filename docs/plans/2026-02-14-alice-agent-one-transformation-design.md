@@ -233,17 +233,17 @@ Nutzt Graphiti temporale Daten + PatternAnalyzer Sliding Windows:
 ### Milestone 2: Guardian Angel & Wellness Module
 **Scope: Wellbeing Score + ADHS Interventionen**
 
-- [ ] `WellbeingScore` DB Model + Migration
-- [ ] `Intervention` DB Model + Migration
-- [ ] `WellbeingService` mit Score-Berechnung
-- [ ] Intervention Engine (7 ADHS-Pattern)
-- [ ] Cron Job: Periodische Score-Berechnung
-- [ ] API Endpoints: score, history, interventions
-- [ ] Expo: Wellbeing Dashboard Screen
-- [ ] Expo: Activity-Rings Score Widget
-- [ ] Expo: 7d Trend Chart
-- [ ] Expo: Intervention Cards (dismiss/snooze/act)
-- [ ] Push Notifications fuer kritische Interventionen
+- [x] `WellbeingScore` DB Model + Migration
+- [x] `Intervention` DB Model + Migration
+- [x] `WellbeingService` mit Score-Berechnung
+- [x] Intervention Engine (7 ADHS-Pattern)
+- [x] Cron Job: Periodische Score-Berechnung
+- [x] API Endpoints: score, history, interventions
+- [x] Expo: Wellbeing Dashboard Screen
+- [x] Expo: Activity-Rings Score Widget
+- [ ] Expo: 7d Trend Chart (Follow-up: Charting Library noetig)
+- [x] Expo: Intervention Cards (dismiss/snooze/act)
+- [x] Push Notifications fuer kritische Interventionen
 
 ### Milestone 3: Morning Briefing & Adaptive Planning
 **Scope: Taegliches Briefing + Smart Task Management**

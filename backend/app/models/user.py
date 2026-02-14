@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from app.models.achievement import UserAchievement
     from app.models.brain_entry import BrainEntry
     from app.models.conversation import Conversation
+    from app.models.intervention import Intervention
     from app.models.mentioned_item import MentionedItem
     from app.models.nudge_history import NudgeHistory
     from app.models.personality_profile import PersonalityProfile
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
     from app.models.task import Task
     from app.models.user_settings import UserSettings
     from app.models.user_stats import UserStats
+    from app.models.wellbeing_score import WellbeingScore
 
 
 class User(BaseModel):
@@ -118,6 +120,18 @@ class User(BaseModel):
     user_settings: Mapped["UserSettings | None"] = relationship(
         back_populates="user",
         uselist=False,
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    wellbeing_scores: Mapped[list["WellbeingScore"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    interventions: Mapped[list["Intervention"]] = relationship(
+        back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",
     )

@@ -16,6 +16,8 @@ from app.models.user_settings import UserSettings, DEFAULT_SETTINGS
 from app.models.user_stats import UserStats
 from app.services.notification import NotificationService, PushNotification
 from app.services.nudge import NudgeService
+from app.services.wellbeing import WellbeingService
+from app.services.intervention_engine import InterventionEngine
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +175,51 @@ async def _process_user(user_id: UUID, token: str, settings: dict) -> None:
                                 data={"type": "streak"},
                             )
                         )
+
+    # 4. Wellbeing check (if wellness module active)
+    try:
+        await _process_wellbeing_check(user_id, settings)
+    except Exception:
+        logger.exception("Wellbeing check error for user %s", user_id)
+
+
+async def _process_wellbeing_check(user_id: UUID, settings: dict) -> None:
+    """Run periodic wellbeing check if wellness module is active."""
+    active_modules = settings.get("active_modules", ["core", "adhs"])
+    if "wellness" not in active_modules:
+        return
+
+    async with AsyncSessionLocal() as db:
+        ws = WellbeingService(db)
+        result = await ws.calculate_and_store(str(user_id))
+
+        ie = InterventionEngine(db)
+        interventions = await ie.evaluate(str(user_id))
+
+        await db.commit()
+
+        # Send push for critical interventions (red zone or new interventions)
+        if result["zone"] == "red" or interventions:
+            token = settings.get("expo_push_token")
+            if token:
+                if result["zone"] == "red":
+                    await NotificationService.send_notification(
+                        PushNotification(
+                            to=token,
+                            title="Wellbeing Check",
+                            body=f"Dein Wellbeing-Score ist bei {result['score']:.0f}/100. Alice ist fuer dich da.",
+                            data={"type": "wellbeing", "score": result["score"]},
+                        )
+                    )
+                for intervention in interventions:
+                    await NotificationService.send_notification(
+                        PushNotification(
+                            to=token,
+                            title="Alice Guardian Angel",
+                            body=intervention["message"],
+                            data={"type": "intervention", "id": str(intervention["id"])},
+                        )
+                    )
 
 
 def _is_quiet_hours(now: datetime, start_str: str, end_str: str) -> bool:

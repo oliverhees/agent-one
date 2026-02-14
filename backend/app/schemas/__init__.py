@@ -66,6 +66,12 @@ from app.schemas.modules import (
     ModulesResponse,
     ModulesUpdate,
 )
+from app.schemas.wellbeing import (
+    InterventionAction,
+    InterventionResponse,
+    WellbeingHistoryResponse,
+    WellbeingScoreResponse,
+)
 
 __all__ = [
     # Auth
@@ -133,4 +139,9 @@ __all__ = [
     "ModulesResponse",
     "ModulesUpdate",
     "ModuleConfigUpdate",
+    # Phase 7: Wellbeing
+    "WellbeingScoreResponse",
+    "WellbeingHistoryResponse",
+    "InterventionResponse",
+    "InterventionAction",
 ]
