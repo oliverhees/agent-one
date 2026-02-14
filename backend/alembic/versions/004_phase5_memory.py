@@ -68,6 +68,12 @@ def upgrade() -> None:
             server_default=sa.text('now()'),
             nullable=False,
         ),
+        sa.Column(
+            'updated_at',
+            sa.DateTime(timezone=True),
+            server_default=sa.text('now()'),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(
             ['user_id'],
             ['users.id'],

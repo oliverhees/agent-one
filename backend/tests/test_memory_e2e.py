@@ -435,9 +435,6 @@ class TestMemoryExportEndpoint:
             mood_score=0.2,
             energy_level=0.5,
             focus_score=0.3,
-            detected_patterns=["procrastination"],
-            pattern_triggers=["deadline_stress"],
-            notable_facts=["User arbeitet als Designer"],
         )
         test_db.add(pattern_log)
         await test_db.commit()

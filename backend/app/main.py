@@ -41,6 +41,7 @@ async def lifespan(app: FastAPI):
         gc_module.graphiti_client = client
         print("Graphiti knowledge graph initialized")
     else:
+        from app.services.graphiti_client import GraphitiClient
         import app.services.graphiti_client as gc_module
         gc_module.graphiti_client = GraphitiClient(enabled=False)
         print("Graphiti knowledge graph disabled")

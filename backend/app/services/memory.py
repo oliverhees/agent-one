@@ -350,16 +350,11 @@ class MemoryService:
 
         # 2. Delete pattern logs from DB
         try:
-            stmt = (
-                select(PatternLog)
-                .where(PatternLog.user_id == str(user_id))
-            )
+            from sqlalchemy import delete
+            stmt = delete(PatternLog).where(PatternLog.user_id == str(user_id))
             result = await self.db.execute(stmt)
-            logs = result.scalars().all()
-            for log in logs:
-                await self.db.delete(log)
             await self.db.flush()
-            logger.info("Deleted %d pattern logs for user %s", len(logs), user_id)
+            logger.info("Deleted %d pattern logs for user %s", result.rowcount, user_id)
         except Exception:
             logger.exception("Error deleting pattern logs for user %s", user_id)
             success = False
