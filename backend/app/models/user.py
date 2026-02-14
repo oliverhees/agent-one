@@ -22,6 +22,10 @@ if TYPE_CHECKING:
     from app.models.briefing import Briefing
     from app.models.wellbeing_score import WellbeingScore
     from app.models.predicted_pattern import PredictedPattern
+    from app.models.calendar_event import CalendarEvent
+    from app.models.reminder import Reminder
+    from app.models.webhook import WebhookConfig
+    from app.models.n8n_workflow import N8nWorkflow
 
 
 class User(BaseModel):
@@ -145,6 +149,30 @@ class User(BaseModel):
     )
 
     predicted_patterns: Mapped[list["PredictedPattern"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    calendar_events: Mapped[list["CalendarEvent"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    reminders: Mapped[list["Reminder"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    webhook_configs: Mapped[list["WebhookConfig"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    n8n_workflows: Mapped[list["N8nWorkflow"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",

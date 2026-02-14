@@ -20,6 +20,10 @@ from app.models.user_settings import UserSettings
 from app.models.user_stats import UserStats
 from app.models.wellbeing_score import WellbeingScore, WellbeingZone
 from app.models.predicted_pattern import PredictedPattern, PredictionStatus
+from app.models.calendar_event import CalendarEvent
+from app.models.reminder import Reminder, ReminderSource, ReminderStatus, ReminderRecurrence
+from app.models.webhook import WebhookConfig, WebhookLog, WebhookDirection
+from app.models.n8n_workflow import N8nWorkflow
 
 __all__ = [
     "Base",
@@ -59,4 +63,13 @@ __all__ = [
     "BriefingStatus",
     "PredictedPattern",
     "PredictionStatus",
+    "CalendarEvent",
+    "Reminder",
+    "ReminderSource",
+    "ReminderStatus",
+    "ReminderRecurrence",
+    "WebhookConfig",
+    "WebhookLog",
+    "WebhookDirection",
+    "N8nWorkflow",
 ]
