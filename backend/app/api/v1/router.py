@@ -19,6 +19,7 @@ from app.api.v1 import (
     voice_live,
     memory,
     wellbeing,
+    briefing,
 )
 
 
@@ -49,3 +50,6 @@ router.include_router(memory.router, prefix="/memory", tags=["Memory"])
 
 # Phase 7: Wellbeing/Guardian Angel routers
 router.include_router(wellbeing.router, prefix="/wellbeing", tags=["Wellbeing"])
+
+# Phase 8: Morning Briefing routers
+router.include_router(briefing.router, prefix="/briefing", tags=["Briefing"])
