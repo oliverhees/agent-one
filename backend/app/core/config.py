@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     google_client_secret: str = Field(default="", alias="GOOGLE_CLIENT_SECRET")
     google_redirect_uri: str = Field(default="http://localhost:8000/api/v1/calendar/auth/google/callback", alias="GOOGLE_REDIRECT_URI")
 
+    # Tavily Research API
+    tavily_api_key: str = Field(default="", alias="TAVILY_API_KEY")
+
+    # LangGraph Feature Flag
+    use_langgraph: bool = Field(default=False, alias="USE_LANGGRAPH")
+
     # CORS
     cors_origins: List[str] | str = Field(
         default=["http://localhost:8081", "http://localhost:19006"],

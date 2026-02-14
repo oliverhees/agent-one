@@ -35,3 +35,19 @@ graphiti-core[falkordb,anthropic]>=0.5,<1.0
 
 # Voice
 edge-tts==7.*
+
+# LangGraph Multi-Agent System
+langgraph>=0.3,<1.0
+langchain-anthropic>=0.3,<1.0
+langchain-community>=0.3,<1.0
+langchain-core>=0.3,<1.0
+
+# Research Agent
+tavily-python>=0.5,<1.0
+
+# Email Agent (async SMTP/IMAP)
+aiosmtplib>=3.0,<4.0
+aioimaplib>=2.0,<3.0
+
+# SSE Streaming
+sse-starlette>=2.0,<3.0
