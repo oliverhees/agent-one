@@ -35,6 +35,12 @@ const TAB_CONFIG: TabConfig[] = [
     icon: "heart-outline",
     requiredModules: ["wellness"],
   },
+  {
+    name: "insights",
+    title: "Insights",
+    icon: "trending-up-outline",
+    requiredModules: ["wellness"],
+  },
   { name: "settings", title: "Einstellungen", icon: "settings-outline" },
 ];
 
