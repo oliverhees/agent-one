@@ -18,6 +18,12 @@ const TAB_CONFIG: TabConfig[] = [
   { name: "tasks", title: "Aufgaben", icon: "checkbox-outline" },
   { name: "brain", title: "Brain", icon: "bulb-outline" },
   {
+    name: "briefing",
+    title: "Briefing",
+    icon: "sunny-outline",
+    requiredModules: ["productivity"],
+  },
+  {
     name: "dashboard",
     title: "Dashboard",
     icon: "analytics-outline",
