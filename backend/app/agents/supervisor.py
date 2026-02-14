@@ -68,6 +68,11 @@ def build_supervisor_graph() -> StateGraph:
     Returns:
         StateGraph instance (not yet compiled)
     """
+    from app.agents.nodes.email_agent import email_agent_node
+    from app.agents.nodes.calendar_agent import calendar_agent_node
+    from app.agents.nodes.research_agent import research_agent_node
+    from app.agents.nodes.briefing_agent import briefing_agent_node
+
     llm = ChatAnthropic(
         model="claude-sonnet-4-5-20250929",
         api_key=settings.anthropic_api_key,
@@ -187,11 +192,27 @@ def build_supervisor_graph() -> StateGraph:
         response = await llm.ainvoke(summary_messages)
         return {"messages": [response]}
 
+    async def email_node(state):
+        return await safe_node(email_agent_node, state, 30.0, "Email-Agent")
+
+    async def calendar_node(state):
+        return await safe_node(calendar_agent_node, state, 15.0, "Calendar-Agent")
+
+    async def research_node(state):
+        return await safe_node(research_agent_node, state, 20.0, "Research-Agent")
+
+    async def briefing_node(state):
+        return await safe_node(briefing_agent_node, state, 15.0, "Briefing-Agent")
+
     graph = StateGraph(AgentState)
     graph.add_node("context_loader", context_loader)
     graph.add_node("supervisor", supervisor_node)
     graph.add_node("direct_response", direct_response)
     graph.add_node("response_node", response_node)
+    graph.add_node("email", email_node)
+    graph.add_node("calendar", calendar_node)
+    graph.add_node("research", research_node)
+    graph.add_node("briefing", briefing_node)
 
     graph.add_edge(START, "context_loader")
     graph.add_edge("context_loader", "supervisor")
@@ -211,12 +232,20 @@ def build_supervisor_graph() -> StateGraph:
             return next_agent
         return "direct_response"
 
-    # Placeholder: all agents route to direct_response (wired in Task 9)
     graph.add_conditional_edges(
         "supervisor",
         route_supervisor,
-        {agent: "direct_response" for agent in AGENT_TYPES} | {"direct_response": "direct_response"},
+        {
+            "email": "email",
+            "calendar": "calendar",
+            "research": "research",
+            "briefing": "briefing",
+            "direct_response": "direct_response",
+        },
     )
+
+    for agent in AGENT_TYPES:
+        graph.add_edge(agent, "response_node")
 
     graph.add_edge("direct_response", "response_node")
     graph.add_edge("response_node", END)
