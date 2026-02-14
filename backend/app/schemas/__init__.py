@@ -84,6 +84,34 @@ from app.schemas.prediction import (
     PredictionResolveRequest,
     PredictionResponse,
 )
+from app.schemas.calendar import (
+    CalendarEventResponse,
+    CalendarEventListResponse,
+    CalendarStatusResponse,
+)
+from app.schemas.reminder import (
+    ReminderCreate,
+    ReminderUpdate,
+    ReminderResponse,
+    ReminderListResponse,
+    ReminderSnoozeRequest,
+)
+from app.schemas.webhook import (
+    WebhookCreate,
+    WebhookUpdate,
+    WebhookResponse,
+    WebhookListResponse,
+    WebhookLogResponse,
+    WebhookLogListResponse,
+)
+from app.schemas.n8n import (
+    N8nWorkflowCreate,
+    N8nWorkflowUpdate,
+    N8nWorkflowResponse,
+    N8nWorkflowListResponse,
+    N8nExecuteRequest,
+    N8nExecuteResponse,
+)
 
 __all__ = [
     # Auth
@@ -166,4 +194,28 @@ __all__ = [
     "PredictionResponse",
     "PredictionListResponse",
     "PredictionResolveRequest",
+    # Phase 10: Calendar
+    "CalendarEventResponse",
+    "CalendarEventListResponse",
+    "CalendarStatusResponse",
+    # Phase 10: Reminders
+    "ReminderCreate",
+    "ReminderUpdate",
+    "ReminderResponse",
+    "ReminderListResponse",
+    "ReminderSnoozeRequest",
+    # Phase 10: Webhooks
+    "WebhookCreate",
+    "WebhookUpdate",
+    "WebhookResponse",
+    "WebhookListResponse",
+    "WebhookLogResponse",
+    "WebhookLogListResponse",
+    # Phase 10: n8n Bridge
+    "N8nWorkflowCreate",
+    "N8nWorkflowUpdate",
+    "N8nWorkflowResponse",
+    "N8nWorkflowListResponse",
+    "N8nExecuteRequest",
+    "N8nExecuteResponse",
 ]
