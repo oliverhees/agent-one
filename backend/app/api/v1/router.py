@@ -17,6 +17,7 @@ from app.api.v1 import (
     settings,
     voice,
     voice_live,
+    memory,
 )
 
 
@@ -41,3 +42,6 @@ router.include_router(settings.router, prefix="/settings", tags=["Settings"])
 # Phase 4: Voice routers
 router.include_router(voice.router, prefix="/voice", tags=["Voice"])
 router.include_router(voice_live.router, prefix="/voice", tags=["Voice Live"])
+
+# Phase 5: Memory/Knowledge Graph routers
+router.include_router(memory.router, prefix="/memory", tags=["Memory"])
