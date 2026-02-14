@@ -19,6 +19,7 @@ from app.services.nudge import NudgeService
 from app.services.wellbeing import WellbeingService
 from app.services.intervention_engine import InterventionEngine
 from app.services.briefing import BriefingService
+from app.services.prediction_engine import PredictionEngine
 
 logger = logging.getLogger(__name__)
 
@@ -189,6 +190,12 @@ async def _process_user(user_id: UUID, token: str, settings: dict) -> None:
     except Exception:
         logger.exception("Morning briefing error for user %s", user_id)
 
+    # 6. Prediction engine (if wellness module active)
+    try:
+        await _process_predictions(user_id, settings)
+    except Exception:
+        logger.exception("Prediction engine error for user %s", user_id)
+
 
 async def _process_wellbeing_check(user_id: UUID, settings: dict) -> None:
     """Run periodic wellbeing check if wellness module is active."""
@@ -271,6 +278,45 @@ async def _process_morning_briefing(user_id: UUID, settings: dict) -> None:
                     data={"type": "briefing", "id": result["id"]},
                 )
             )
+
+
+async def _process_predictions(user_id: UUID, settings: dict) -> None:
+    """Run prediction engine if wellness module is active."""
+    active_modules = settings.get("active_modules", ["core", "adhs"])
+    if "wellness" not in active_modules:
+        return
+
+    async with AsyncSessionLocal() as db:
+        from app.services.graphiti_client import get_graphiti_client
+        graphiti = get_graphiti_client()
+        engine = PredictionEngine(db, graphiti_client=graphiti)
+
+        await engine.expire_old_predictions(str(user_id))
+        predictions = await engine.predict(str(user_id))
+        await db.commit()
+
+        # Push notification for high-confidence predictions
+        token = settings.get("expo_push_token")
+        if token and predictions:
+            for pred in predictions:
+                if pred["confidence"] >= 0.75:
+                    PATTERN_LABELS = {
+                        "energy_crash": "Energie-Einbruch",
+                        "procrastination": "Prokrastinations-Spirale",
+                        "hyperfocus": "Hyperfokus-Falle",
+                        "decision_fatigue": "Entscheidungsmuedigkeit",
+                        "sleep_disruption": "Schlafproblem",
+                        "social_masking": "Social Masking",
+                    }
+                    label = PATTERN_LABELS.get(pred["pattern_type"], pred["pattern_type"])
+                    await NotificationService.send_notification(
+                        PushNotification(
+                            to=token,
+                            title="Pattern-Vorhersage",
+                            body=f"Alice sieht einen moeglichen {label} in den naechsten {pred['time_horizon']}.",
+                            data={"type": "prediction", "id": pred["id"]},
+                        )
+                    )
 
 
 def _is_quiet_hours(now: datetime, start_str: str, end_str: str) -> bool:
