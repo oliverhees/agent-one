@@ -24,6 +24,11 @@ from app.models.calendar_event import CalendarEvent
 from app.models.reminder import Reminder, ReminderSource, ReminderStatus, ReminderRecurrence
 from app.models.webhook import WebhookConfig, WebhookLog, WebhookDirection
 from app.models.n8n_workflow import N8nWorkflow
+from app.models.trust_score import TrustScore
+from app.models.agent_activity import AgentActivity, AgentActivityStatus
+from app.models.approval_request import ApprovalRequest, ApprovalStatus
+from app.models.email_config import EmailConfig
+from app.models.reflexion_log import ReflexionLog, ReflexionOutcome
 
 __all__ = [
     "Base",
@@ -72,4 +77,12 @@ __all__ = [
     "WebhookLog",
     "WebhookDirection",
     "N8nWorkflow",
+    "TrustScore",
+    "AgentActivity",
+    "AgentActivityStatus",
+    "ApprovalRequest",
+    "ApprovalStatus",
+    "EmailConfig",
+    "ReflexionLog",
+    "ReflexionOutcome",
 ]

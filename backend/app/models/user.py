@@ -26,6 +26,11 @@ if TYPE_CHECKING:
     from app.models.reminder import Reminder
     from app.models.webhook import WebhookConfig
     from app.models.n8n_workflow import N8nWorkflow
+    from app.models.trust_score import TrustScore
+    from app.models.agent_activity import AgentActivity
+    from app.models.approval_request import ApprovalRequest
+    from app.models.email_config import EmailConfig
+    from app.models.reflexion_log import ReflexionLog
 
 
 class User(BaseModel):
@@ -173,6 +178,37 @@ class User(BaseModel):
     )
 
     n8n_workflows: Mapped[list["N8nWorkflow"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    trust_scores: Mapped[list["TrustScore"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    agent_activities: Mapped[list["AgentActivity"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    approval_requests: Mapped[list["ApprovalRequest"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    email_config: Mapped["EmailConfig | None"] = relationship(
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    reflexion_logs: Mapped[list["ReflexionLog"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",
