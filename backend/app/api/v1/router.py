@@ -25,6 +25,8 @@ from app.api.v1 import (
     reminders,
     webhooks,
     n8n,
+    agents,
+    agent_stream,
 )
 
 
@@ -67,3 +69,7 @@ router.include_router(calendar.router, prefix="/calendar", tags=["Calendar"])
 router.include_router(reminders.router, prefix="/reminders", tags=["Reminders"])
 router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 router.include_router(n8n.router, prefix="/n8n", tags=["n8n"])
+
+# Phase 11: Multi-Agent System routers
+router.include_router(agents.router, prefix="/agents", tags=["Agents"])
+router.include_router(agent_stream.router, prefix="/agents", tags=["Agent Stream"])
