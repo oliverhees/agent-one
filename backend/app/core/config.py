@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
 
+    # Google Calendar OAuth
+    google_client_id: str = Field(default="", alias="GOOGLE_CLIENT_ID")
+    google_client_secret: str = Field(default="", alias="GOOGLE_CLIENT_SECRET")
+    google_redirect_uri: str = Field(default="http://localhost:8000/api/v1/calendar/auth/google/callback", alias="GOOGLE_REDIRECT_URI")
+
     # CORS
     cors_origins: List[str] | str = Field(
         default=["http://localhost:8081", "http://localhost:19006"],
