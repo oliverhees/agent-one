@@ -1,7 +1,7 @@
 # Datenbankschema
 
-**Letzte Aenderung:** 2026-02-06
-**Letzte Migration:** 003_phase3_tables
+**Letzte Aenderung:** 2026-02-14
+**Letzte Migration:** 004_phase5_memory
 **Datenbank:** PostgreSQL 16 + pgvector Extension
 **ORM:** SQLAlchemy 2.0 (async)
 **Migrationen:** Alembic
@@ -19,8 +19,9 @@
 4. [Phase 2: Core Features](#phase-2-core-features)
 5. [Phase 3: ADHS-Modus](#phase-3-adhs-modus)
 6. [Phase 4: Plugins & Calendar](#phase-4-plugins--calendar)
-7. [Enums](#enums)
-8. [Indizes](#indizes)
+7. [Phase 5: Knowledge Graph & NLP](#phase-5-knowledge-graph--nlp)
+8. [Enums](#enums)
+9. [Indizes](#indizes)
 
 ---
 
@@ -42,8 +43,10 @@ erDiagram
     users ||--|| user_settings : has
     users ||--o{ xp_history : has
     users ||--o{ calendar_events : has
+    users ||--o{ pattern_logs : has
 
     conversations ||--o{ messages : contains
+    conversations ||--o{ pattern_logs : has
 
     messages ||--o{ mentioned_items : references
 
@@ -645,6 +648,33 @@ Speichert gecachte Kalender-Events (aus Google Calendar oder anderen Quellen).
 
 ---
 
+## Phase 5: Knowledge Graph & NLP
+
+**Migration:** `004_phase5_memory`
+
+### Tabelle: `pattern_logs`
+
+Speichert NLP-Analyse-Scores pro Gespraech fuer Trend-Tracking.
+
+| Spalte | Typ | Constraints | Beschreibung |
+|---|---|---|---|
+| `id` | `UUID` | `PK, DEFAULT gen_random_uuid()` | Eindeutige Log-ID |
+| `user_id` | `UUID` | `NOT NULL, FK -> users(id) ON DELETE CASCADE` | Zugehoeriger Benutzer |
+| `conversation_id` | `UUID` | `NULL, FK -> conversations(id) ON DELETE SET NULL` | Zugehoerige Konversation |
+| `episode_id` | `VARCHAR(255)` | `NULL` | Graphiti Episode Reference ID |
+| `mood_score` | `FLOAT` | `NULL` | Stimmungswert: -1.0 (negativ) bis 1.0 (positiv) |
+| `energy_level` | `FLOAT` | `NULL` | Energielevel: 0.0 (niedrig) bis 1.0 (hoch) |
+| `focus_score` | `FLOAT` | `NULL` | Fokus-Score: 0.0 (unfokussiert) bis 1.0 (fokussiert) |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT now()` | Erstellungszeitpunkt |
+
+**Indizes:**
+- `ix_pattern_logs_user_date` auf `(user_id, created_at DESC)` -- fuer Trend-Abfragen
+- `ix_pattern_logs_conversation` auf `conversation_id` -- fuer Konversations-Lookup
+
+**Hinweis:** Die eigentlichen ADHS-Muster und Fakten werden im FalkorDB Knowledge Graph gespeichert (Graphiti Framework), nicht in PostgreSQL. Die pattern_logs Tabelle speichert nur die numerischen Scores fuer effiziente SQL-basierte Trend-Analysen.
+
+---
+
 ## Enums
 
 Alle Enums als PostgreSQL native ENUM Types:
@@ -724,6 +754,8 @@ CREATE TYPE nudge_type AS ENUM ('follow_up', 'deadline', 'streak_reminder', 'mot
 | calendar_events | ix_calendar_events_user_id | user_id | BTREE | User-Events |
 | calendar_events | ix_calendar_events_user_start | user_id, start_time | BTREE | Tagesansicht |
 | calendar_events | uq_calendar_events_user_external | user_id, external_id, source | UNIQUE | Keine Duplikate |
+| pattern_logs | ix_pattern_logs_user_date | user_id, created_at DESC | BTREE | Trend-Abfragen |
+| pattern_logs | ix_pattern_logs_conversation | conversation_id | BTREE | Konversations-Lookup |
 
 ---
 
@@ -736,6 +768,7 @@ CREATE TYPE nudge_type AS ENUM ('follow_up', 'deadline', 'streak_reminder', 'mot
 | 001 | 001_initial_schema | users, conversations, messages, refresh_tokens, pgvector Extension, message_role ENUM | 1 |
 | 002 | 002_phase2_tables | tasks, brain_entries, brain_embeddings, mentioned_items, personality_templates (+ Seed), personality_profiles, 7 ENUMs | 2 |
 | 003 | 003_phase3_tables | user_stats, achievements (+ Seed), user_achievements, nudge_history, user_settings, 2 ENUMs | 3 |
+| 004 | 004_phase5_memory | pattern_logs | 5 |
 
 ### Geplante Migrationen
 

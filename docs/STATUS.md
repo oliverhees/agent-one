@@ -1,7 +1,7 @@
 # ALICE - Projektstatus
 
-**Letzte Aktualisierung:** 2026-02-07
-**Version:** Phase 4 (in Arbeit)
+**Letzte Aktualisierung:** 2026-02-14
+**Version:** Phase 5 (in Arbeit)
 
 ---
 
@@ -12,8 +12,8 @@
 - **Projekt-Typ:** Mobile App (React Native + Expo) mit Python FastAPI Backend
 - **Repository:** GitHub (private)
 - **Projektmanagement:** Linear
-- **Status:** Phase 3 abgeschlossen, Phase 4 in Arbeit
-- **Tests:** 194 Tests (alle bestanden, 0 Failures)
+- **Status:** Phase 4 abgeschlossen, Phase 5 in Arbeit
+- **Tests:** ~300 Tests (alle bestanden, 0 Failures)
 - **Test-Coverage:** >= 80%
 
 ---
@@ -193,6 +193,43 @@
 
 ---
 
+### Phase 5: Knowledge Graph & NLP 🔄 (In Arbeit)
+
+**Status:** Grundsystem implementiert
+
+**Backend Services:**
+- **GraphitiClient:** FalkorDB-basierter temporaler Knowledge Graph (Graphiti Framework)
+- **NLPAnalyzer:** Stimmungs-, Energie- und Fokus-Analyse pro Gespraech (Claude Haiku)
+- **PatternAnalyzer:** Trend-Erkennung ueber Zeit aus pattern_logs
+- **MemoryService:** Orchestrator fuer Graph + NLP
+- **ContextBuilder:** System Prompt Enrichment mit Memory-Kontext
+
+**API Endpoints (4 neue):**
+- `GET /api/v1/memory/status` - Memory-System Status
+- `GET /api/v1/memory/export` - DSGVO Art. 15 Datenexport
+- `DELETE /api/v1/memory` - DSGVO Art. 17 Komplett-Loeschung
+- `PUT /api/v1/settings/memory` - Memory ein/ausschalten
+
+**Migration:**
+- `004_phase5_memory` - pattern_logs (1 Tabelle)
+
+**ADHS Patterns (13 Seed):**
+Procrastination, Hyperfocus, Task-Switching, Paralysis by Analysis,
+Time Blindness, Emotional Dysregulation, Rejection Sensitivity,
+Dopamine Seeking, Working Memory Overload, Sleep Disruption,
+Transition Difficulty, Perfectionism Paralysis, Social Masking
+
+**Infrastruktur:**
+- FalkorDB v4.4.1 ersetzt Redis (Redis-kompatibel, FalkorDB Modul fuer Graph)
+- graphiti-core[falkordb,anthropic] >= 0.5, < 1.0
+
+**Noch ausstehend:**
+- FalkorDB + Graphiti Produktiv-Test (erfordert laufenden FalkorDB Container)
+- Pattern Discovery Service (automatische Erkennung neuer Muster)
+- Mobile UI fuer Memory-Status und Trends
+
+---
+
 ## Datenbank
 
 ### Migrationen
@@ -202,7 +239,8 @@
 | `001_foundation` | 2026-02-04 | 3 (users, conversations, messages) | 1 (MessageRole) | ✅ |
 | `002_phase2_tables` | 2026-02-05 | 6 (tasks, brain_entries, brain_embeddings, mentioned_items, personality_profiles, personality_templates) | 7 (TaskStatus, TaskPriority, BrainEntryType, MentionedItemType, MentionedItemStatus, PersonalityTrait, VoiceType) | ✅ |
 | `003_phase3_tables` | 2026-02-06 | 4 (achievements, user_stats, user_settings, nudge_history) | 2 (AchievementCategory, NudgePriority) | ✅ |
-| **Gesamt** | -- | **13 Tabellen** | **10 Enums** | -- |
+| `004_phase5_memory` | 2026-02-14 | 1 (pattern_logs) | 0 | ✅ |
+| **Gesamt** | -- | **14 Tabellen** | **10 Enums** | -- |
 
 ### Schema-Highlights
 
@@ -227,6 +265,7 @@
 | Phase 1 | 47 | ✅ Alle bestanden | >= 80% |
 | Phase 2 | +77 (Total: 124) | ✅ Alle bestanden | >= 80% |
 | Phase 3 | +70 (Total: 194) | ✅ Alle bestanden | >= 80% |
+| Phase 5 | +~106 (Total: ~300) | ✅ Alle bestanden | >= 80% |
 
 ### Test-Infrastruktur
 
@@ -309,7 +348,16 @@
 | PUT | `/api/v1/settings/adhs` | ADHS-Einstellungen aendern |
 | POST | `/api/v1/settings/push-token` | Push Token registrieren |
 
-**Gesamt: 36 Endpoints**
+### Phase 5: Memory (4 Endpoints)
+
+| Method | Path | Beschreibung |
+|--------|------|-------------|
+| GET | `/api/v1/memory/status` | Memory-System Status |
+| GET | `/api/v1/memory/export` | DSGVO Art. 15 Datenexport |
+| DELETE | `/api/v1/memory` | DSGVO Art. 17 Komplett-Loeschung |
+| PUT | `/api/v1/settings/memory` | Memory ein/ausschalten |
+
+**Gesamt: 40 Endpoints**
 
 ---
 
@@ -337,7 +385,7 @@ docker-compose up -d
 Services:
 - **api:** FastAPI (Port 8000)
 - **db:** PostgreSQL 16 + pgvector (Port 5432)
-- **redis:** Redis 7 (Port 6379)
+- **falkordb:** FalkorDB 4.4.1 (Port 6379, Redis-kompatibel + Graph)
 - **celery:** Celery Worker (Placeholder)
 
 ### Docker Compose (Production)
@@ -351,7 +399,7 @@ Services:
 - **celery:** Celery Worker (1 Worker, 4 Threads)
 - **scheduler:** APScheduler (in-process, 1 Instanz)
 - **db:** PostgreSQL 16 + pgvector
-- **redis:** Redis 7
+- **falkordb:** FalkorDB 4.4.1 (Redis-kompatibel + Graph)
 
 ### Coolify Deployment
 
@@ -406,25 +454,26 @@ Services:
 
 ---
 
-## Next Steps (Phase 4)
+## Next Steps (Phase 5+)
 
 ### Prioritaet 1 (Kritisch)
 
-- [ ] **Push Notification Deep Linking:** Robustes Deep Link State Management (Navigation zu Task, Chat, Dashboard bei Notification Tap)
-- [ ] **Background Scheduler Migration:** Von asyncio Task zu Celery Worker (Skalierbarkeit)
-- [ ] **Semantische Brain-Suche:** pgvector Cosine Similarity aktivieren (aktuell nur ILIKE)
+- [ ] **FalkorDB Produktiv-Test:** FalkorDB Container + Graphiti Integration im laufenden System testen
+- [ ] **Pattern Discovery Service:** Automatische Erkennung neuer ADHS-Muster aus Gespraechen
+- [ ] **Memory E2E Integration Tests:** Vollstaendige Integrationstests mit FalkorDB Container
 
 ### Prioritaet 2 (Wichtig)
 
-- [ ] **LiveKit Voice Chat:** Echtzeit-Voice-Chat-Integration
-- [ ] **Google Calendar Sync:** Plugin-basierte Kalender-Synchronisation
-- [ ] **n8n Bridge:** Webhook-basierte Automation-Integration
-- [ ] **Voice Journal:** Audio-Aufnahme + Transkription + Brain-Entry
+- [ ] **Mobile Memory UI:** Memory-Status, Trend-Anzeige und Einstellungen in der App
+- [ ] **Push Notification Deep Linking:** Robustes Deep Link State Management
+- [ ] **Background Scheduler Migration:** Von asyncio Task zu Celery Worker (Skalierbarkeit)
+- [ ] **Semantische Brain-Suche:** pgvector Cosine Similarity aktivieren (aktuell nur ILIKE)
 
 ### Prioritaet 3 (Nice-to-Have)
 
+- [ ] **LiveKit Voice Chat:** Echtzeit-Voice-Chat-Integration
+- [ ] **Google Calendar Sync:** Plugin-basierte Kalender-Synchronisation
 - [ ] **Nextra Docs:** User + Developer Dokumentation (aktuell nur Markdown)
-- [ ] **E2E Tests:** Playwright (Mobile E2E Tests)
 - [ ] **CI/CD:** GitHub Actions (Lint, Test, Build, Deploy)
 - [ ] **Monitoring:** Sentry (Error Tracking), Prometheus (Metrics)
 

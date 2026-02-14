@@ -1,7 +1,7 @@
 # API Endpoints
 
-**Version:** 2.1
-**Datum:** 2026-02-07
+**Version:** 2.2
+**Datum:** 2026-02-14
 **Base URL:** `https://api.alice-app.de/api/v1`
 **Dokumentation:** Auto-generiert via FastAPI (Swagger UI unter `/docs`, ReDoc unter `/redoc`)
 
@@ -18,8 +18,9 @@
 7. [Personality Endpoints](#personality-endpoints)
 8. [Proactive Endpoints](#proactive-endpoints)
 9. [Settings Endpoints](#settings-endpoints)
-10. [Fehlercodes](#fehlercodes)
-11. [Zusammenfassung](#zusammenfassung)
+10. [Memory Endpoints](#memory-endpoints)
+11. [Fehlercodes](#fehlercodes)
+12. [Zusammenfassung](#zusammenfassung)
 
 > **Hinweis:** Dieses Dokument spezifiziert die Endpoints fuer **Phase 1 (Foundation)** und **Phase 2 (Core Features)**. Spaetere Phasen werden ergaenzt, wenn die Implementierung ansteht.
 
@@ -2440,6 +2441,136 @@ Aktualisiert Voice-Provider-Einstellungen.
 
 ---
 
+## Memory Endpoints
+
+Memory-Verwaltung fuer das Knowledge Graph & NLP System (Phase 5).
+
+### `GET /api/v1/memory/status`
+
+Gibt den aktuellen Status des Memory-Systems zurueck.
+
+**Auth:** Bearer Token (erforderlich)
+**Rate Limit:** 60/min
+
+**Response 200 OK:**
+```json
+{
+  "enabled": true,
+  "total_episodes": 42,
+  "total_entities": 156,
+  "last_analysis_at": "2026-02-14T15:30:00Z"
+}
+```
+
+**Response Schema:**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `enabled` | `boolean` | Memory-System aktiviert? |
+| `total_episodes` | `integer` | Anzahl gespeicherter Episoden im Knowledge Graph |
+| `total_entities` | `integer` | Anzahl gespeicherter Entitaeten im Knowledge Graph |
+| `last_analysis_at` | `string (ISO 8601)` | Zeitpunkt der letzten NLP-Analyse |
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+
+---
+
+### `GET /api/v1/memory/export`
+
+Exportiert alle gespeicherten Fakten, Relationen und Pattern-Logs (DSGVO Art. 15).
+
+**Auth:** Bearer Token (erforderlich)
+**Rate Limit:** 10/min
+
+**Response 200 OK:**
+```json
+{
+  "entities": [],
+  "relations": [],
+  "pattern_logs": [],
+  "exported_at": "2026-02-14T15:30:00Z"
+}
+```
+
+**Response Schema:**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `entities` | `array` | Alle Entitaeten des Users aus dem Knowledge Graph |
+| `relations` | `array` | Alle Relationen des Users aus dem Knowledge Graph |
+| `pattern_logs` | `array` | Alle NLP-Analyse-Logs aus pattern_logs |
+| `exported_at` | `string (ISO 8601)` | Zeitpunkt des Exports |
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+
+---
+
+### `DELETE /api/v1/memory`
+
+Loescht alle Memory-Daten des Users (Knowledge Graph + pattern_logs). DSGVO Art. 17.
+
+**Auth:** Bearer Token (erforderlich)
+**Rate Limit:** 5/min
+
+**Response 200 OK:**
+```json
+{
+  "message": "Alle Memory-Daten wurden geloescht"
+}
+```
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+
+---
+
+### `PUT /api/v1/settings/memory`
+
+Schaltet das Memory-System ein oder aus.
+
+**Auth:** Bearer Token (erforderlich)
+**Rate Limit:** 60/min
+
+**Request Body:**
+```json
+{
+  "enabled": true
+}
+```
+
+**Request Schema:**
+
+| Feld | Typ | Pflicht | Beschreibung |
+|---|---|---|---|
+| `enabled` | `boolean` | Ja | Memory-System ein/ausschalten |
+
+**Response 200 OK:**
+```json
+{
+  "enabled": true
+}
+```
+
+**Fehlerfaelle:**
+
+| Status | Code | Beschreibung |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | Kein oder ungueltiger Access Token |
+| 422 | `VALIDATION_ERROR` | Ungueltiger Request Body |
+
+---
+
 ## Fehlercodes
 
 ### Allgemeine HTTP Status Codes
@@ -2544,6 +2675,17 @@ Aktualisiert Voice-Provider-Einstellungen.
 | PUT | `/api/v1/settings/api-keys` | API-Keys speichern (verschluesselt) | Ja | 60/min |
 | GET | `/api/v1/settings/voice-providers` | Voice-Provider-Einstellungen abrufen | Ja | 60/min |
 | PUT | `/api/v1/settings/voice-providers` | Voice-Provider-Einstellungen aktualisieren | Ja | 60/min |
+
+### Phase 5: Memory
+
+| Method | Path | Beschreibung | Auth | Rate Limit |
+|---|---|---|---|---|
+| GET | `/api/v1/memory/status` | Memory-System Status | Ja | 60/min |
+| GET | `/api/v1/memory/export` | DSGVO Art. 15 Datenexport | Ja | 10/min |
+| DELETE | `/api/v1/memory` | DSGVO Art. 17 Komplett-Loeschung | Ja | 5/min |
+| PUT | `/api/v1/settings/memory` | Memory ein/ausschalten | Ja | 60/min |
+
+**Gesamt: 40 Endpoints** (Phase 1: 10, Phase 2: 14, Phase 3: 12, Phase 5: 4)
 
 ---
 
