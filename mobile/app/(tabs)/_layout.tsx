@@ -24,6 +24,12 @@ const TAB_CONFIG: TabConfig[] = [
     requiredModules: ["productivity"],
   },
   {
+    name: "calendar",
+    title: "Kalender",
+    icon: "calendar-outline",
+    requiredModules: ["integrations"],
+  },
+  {
     name: "dashboard",
     title: "Dashboard",
     icon: "analytics-outline",
