@@ -18,6 +18,7 @@ from app.services.notification import NotificationService, PushNotification
 from app.services.nudge import NudgeService
 from app.services.wellbeing import WellbeingService
 from app.services.intervention_engine import InterventionEngine
+from app.services.briefing import BriefingService
 
 logger = logging.getLogger(__name__)
 
@@ -182,6 +183,12 @@ async def _process_user(user_id: UUID, token: str, settings: dict) -> None:
     except Exception:
         logger.exception("Wellbeing check error for user %s", user_id)
 
+    # 5. Morning Briefing (if productivity module active)
+    try:
+        await _process_morning_briefing(user_id, settings)
+    except Exception:
+        logger.exception("Morning briefing error for user %s", user_id)
+
 
 async def _process_wellbeing_check(user_id: UUID, settings: dict) -> None:
     """Run periodic wellbeing check if wellness module is active."""
@@ -220,6 +227,50 @@ async def _process_wellbeing_check(user_id: UUID, settings: dict) -> None:
                             data={"type": "intervention", "id": str(intervention["id"])},
                         )
                     )
+
+
+async def _process_morning_briefing(user_id: UUID, settings: dict) -> None:
+    """Generate and deliver Morning Briefing if productivity module is active."""
+    active_modules = settings.get("active_modules", ["core", "adhs"])
+    if "productivity" not in active_modules:
+        return
+
+    if not settings.get("morning_briefing", True):
+        return
+
+    # Check if we're near the briefing time
+    briefing_time = settings.get("briefing_time", "07:00")
+    now_berlin = datetime.now(BERLIN_TZ)
+    if not _is_near_reminder_time(now_berlin, [briefing_time], window_minutes=5):
+        return
+
+    async with AsyncSessionLocal() as db:
+        service = BriefingService(db)
+
+        # Don't regenerate if already exists for today
+        existing = await service.get_today_briefing(str(user_id))
+        if existing:
+            return
+
+        display_name = settings.get("display_name")
+        max_tasks = settings.get("max_daily_tasks", 3)
+
+        result = await service.generate_briefing(
+            str(user_id), display_name=display_name, max_tasks=max_tasks
+        )
+        await db.commit()
+
+        # Send push notification
+        token = settings.get("expo_push_token")
+        if token:
+            await NotificationService.send_notification(
+                PushNotification(
+                    to=token,
+                    title="Dein Morning Briefing",
+                    body=result["content"][:100] + "...",
+                    data={"type": "briefing", "id": result["id"]},
+                )
+            )
 
 
 def _is_quiet_hours(now: datetime, start_str: str, end_str: str) -> bool:

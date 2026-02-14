@@ -248,18 +248,18 @@ Nutzt Graphiti temporale Daten + PatternAnalyzer Sliding Windows:
 ### Milestone 3: Morning Briefing & Adaptive Planning
 **Scope: Taegliches Briefing + Smart Task Management**
 
-- [ ] `Briefing` DB Model + Migration
-- [ ] `BriefingService` mit LLM-Generierung
-- [ ] Graphiti-Context fuer Briefing-Personalisierung
-- [ ] Cron Job: Briefing-Generierung um konfigurierbare Zeit
-- [ ] Push Notification: "Briefing ist fertig"
-- [ ] Energie-basierte Task-Priorisierung
-- [ ] Max-3-Tasks Regel (ADHS-Modul)
-- [ ] Brain Dump Quick-Capture Feature
-- [ ] API: briefings/today, briefings/history
-- [ ] Expo: Briefing Screen (erster Tab wenn aktiviert)
-- [ ] Expo: Swipeable Task Cards
-- [ ] Expo: Brain Dump Input
+- [x] `Briefing` DB Model + Migration
+- [x] `BriefingService` mit LLM-Generierung
+- [ ] Graphiti-Context fuer Briefing-Personalisierung (Follow-up: requires deeper Graphiti integration)
+- [x] Cron Job: Briefing-Generierung um konfigurierbare Zeit
+- [x] Push Notification: "Briefing ist fertig"
+- [x] Energie-basierte Task-Priorisierung
+- [x] Max-3-Tasks Regel (ADHS-Modul)
+- [x] Brain Dump Quick-Capture Feature
+- [x] API: briefings/today, briefings/history
+- [x] Expo: Briefing Screen (erster Tab wenn aktiviert)
+- [ ] Expo: Swipeable Task Cards (Follow-up: requires gesture handler)
+- [x] Expo: Brain Dump Input
 
 ### Milestone 4: Predictive Pattern Engine
 **Scope: Vorhersage statt nur Analyse**

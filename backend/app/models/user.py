@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from app.models.task import Task
     from app.models.user_settings import UserSettings
     from app.models.user_stats import UserStats
+    from app.models.briefing import Briefing
     from app.models.wellbeing_score import WellbeingScore
 
 
@@ -131,6 +132,12 @@ class User(BaseModel):
     )
 
     interventions: Mapped[list["Intervention"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    briefings: Mapped[list["Briefing"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",
