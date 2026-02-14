@@ -1,13 +1,27 @@
-import React from "react";
-import { View, Text, ScrollView, TouchableOpacity } from "react-native";
+import React, { useEffect } from "react";
+import { View, Text, ScrollView, TouchableOpacity, Switch } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
 import { useAuthStore } from "../../../stores/authStore";
+import { useModuleStore } from "../../../stores/moduleStore";
 import { router } from "expo-router";
 
 export default function SettingsScreen() {
   const { user, logout, isLoading } = useAuthStore();
+  const { availableModules, activeModules, updateModules, fetchModules } =
+    useModuleStore();
+
+  useEffect(() => {
+    fetchModules();
+  }, []);
+
+  const toggleModule = (moduleName: string) => {
+    const newModules = activeModules.includes(moduleName)
+      ? activeModules.filter((m) => m !== moduleName)
+      : [...activeModules, moduleName];
+    updateModules(newModules);
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -17,6 +31,42 @@ export default function SettingsScreen() {
   return (
     <ScrollView className="flex-1 bg-gray-50 dark:bg-gray-900">
       <View className="p-6">
+        <Card className="mb-4">
+          <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+            Meine Module
+          </Text>
+          {availableModules.map((mod) => (
+            <View
+              key={mod.name}
+              className="flex-row items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800 last:border-0"
+            >
+              <View className="flex-row items-center flex-1">
+                <Ionicons
+                  name={mod.icon as any}
+                  size={22}
+                  color={mod.active ? "#0284c7" : "#9ca3af"}
+                  style={{ marginRight: 10 }}
+                />
+                <View className="flex-1">
+                  <Text className="font-semibold text-gray-900 dark:text-white">
+                    {mod.label}
+                  </Text>
+                  {mod.name === "core" && (
+                    <Text className="text-xs text-gray-400">Immer aktiv</Text>
+                  )}
+                </View>
+              </View>
+              <Switch
+                value={mod.active}
+                onValueChange={() => toggleModule(mod.name)}
+                disabled={mod.name === "core"}
+                trackColor={{ false: "#767577", true: "#0284c7" }}
+                thumbColor="#ffffff"
+              />
+            </View>
+          ))}
+        </Card>
+
         <Card className="mb-4">
           <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
             Benutzerprofil
