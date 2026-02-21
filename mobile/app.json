@@ -32,7 +32,8 @@
       },
       "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false,
-      "softwareKeyboardLayoutMode": "adjustResize"
+      "softwareKeyboardLayoutMode": "adjustResize",
+      "package": "com.hrcodelabs.agentone"
     },
     "web": {
       "favicon": "./assets/favicon.png"
