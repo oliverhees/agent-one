@@ -4,6 +4,6 @@ const apiUrl =
   process.env.EXPO_PUBLIC_API_URL ||
   (__DEV__
     ? "http://192.168.1.164:8000/api/v1"
-    : "http://89.167.90.18/api/v1");
+    : "http://89.167.90.18.nip.io/api/v1");
 
 export default { apiUrl };

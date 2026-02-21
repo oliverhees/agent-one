@@ -13,12 +13,12 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://89.167.90.18/api/v1"
+        "EXPO_PUBLIC_API_URL": "http://89.167.90.18.nip.io/api/v1"
       }
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://89.167.90.18/api/v1"
+        "EXPO_PUBLIC_API_URL": "http://89.167.90.18.nip.io/api/v1"
       }
     }
   },
