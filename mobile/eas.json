@@ -11,9 +11,16 @@
       }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://89.167.90.18:8000/api/v1"
+      }
     },
-    "production": {}
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://89.167.90.18:8000/api/v1"
+      }
+    }
   },
   "submit": {
     "production": {}
