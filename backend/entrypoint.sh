@@ -2,8 +2,11 @@
 set -e
 
 echo "Running Alembic migrations..."
-# Stamp existing schema if alembic_version table doesn't exist
-# (handles first run after switching from create_all to Alembic)
+# Check if this is an existing DB (created before Alembic was introduced)
+# by looking for alembic_version AND the users table.
+# - No alembic_version + has users → stamp 001 (legacy DB, tables already exist)
+# - No alembic_version + no users → fresh DB, run all migrations from scratch
+# - Has alembic_version → just upgrade head
 python -c "
 import asyncio, asyncpg, os
 async def check():
@@ -15,17 +18,26 @@ async def check():
         password=os.environ.get('POSTGRES_PASSWORD', 'alice_dev_123'),
     )
     try:
-        result = await conn.fetchval(\"\"\"
+        has_alembic = await conn.fetchval(\"\"\"
             SELECT EXISTS (
                 SELECT FROM information_schema.tables
                 WHERE table_name = 'alembic_version'
             )
         \"\"\")
-        if not result:
-            print('No alembic_version table found, stamping 001...')
+        if has_alembic:
+            print('alembic_version table exists, proceeding with upgrade...')
+            exit(0)
+        has_users = await conn.fetchval(\"\"\"
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables
+                WHERE table_name = 'users'
+            )
+        \"\"\")
+        if has_users:
+            print('Legacy DB detected (users exists, no alembic_version), stamping 001...')
             exit(1)
         else:
-            print('alembic_version table exists, proceeding...')
+            print('Fresh DB detected, running all migrations from scratch...')
             exit(0)
     finally:
         await conn.close()
