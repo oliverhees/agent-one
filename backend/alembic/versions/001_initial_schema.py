@@ -36,7 +36,7 @@ def upgrade() -> None:
     message_role = postgresql.ENUM(
         'user', 'assistant', 'system',
         name='message_role',
-        create_type=True
+        create_type=False  # create_type=False because we call .create() explicitly below
     )
     message_role.create(op.get_bind())
 
