@@ -33,6 +33,7 @@
       "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false,
       "softwareKeyboardLayoutMode": "resize",
+      "usesCleartextTraffic": true,
       "package": "com.hrcodelabs.agentone"
     },
     "web": {
