@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,29 +8,24 @@ import {
   ActivityIndicator,
   StyleSheet,
   useColorScheme,
-  Keyboard,
-  Dimensions,
+  KeyboardAvoidingView,
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import Markdown from "react-native-markdown-display";
 import { useChatStore } from "../../../stores/chatStore";
 import { Message } from "../../../types/chat";
 import { useAudioRecorder } from "../../../hooks/useAudioRecorder";
 import { useAudioPlayer } from "../../../hooks/useAudioPlayer";
 import { voiceService } from "../../../services/voiceService";
+import { useWakeWord } from "../../../hooks/useWakeWord";
+import { useWakeWordStore } from "../../../stores/wakeWordStore";
 
-const INPUT_BAR_HEIGHT = 68;
-const WINDOW_HEIGHT = Dimensions.get("window").height;
-
-// Pre-process AI content: ensure every \n becomes \n\n for Markdown paragraph breaks
 function formatMarkdown(content: string): string {
-  // Simple approach: replace all \n with \n\n, then collapse excessive newlines
   return content.replace(/\n/g, "\n\n").replace(/\n{3,}/g, "\n\n");
 }
 
-// Markdown styles for assistant messages (light mode)
 const mdStylesLight = StyleSheet.create({
   body: { color: "#111827", fontSize: 16, lineHeight: 24 },
   strong: { fontWeight: "700" },
@@ -59,7 +54,6 @@ const mdStylesLight = StyleSheet.create({
   blockquote: { borderLeftWidth: 3, borderLeftColor: "#0284c7", paddingLeft: 12, marginVertical: 6 },
 });
 
-// Markdown styles for assistant messages (dark mode)
 const mdStylesDark = StyleSheet.create({
   body: { color: "#ffffff", fontSize: 16, lineHeight: 24 },
   strong: { fontWeight: "700" },
@@ -89,42 +83,45 @@ const mdStylesDark = StyleSheet.create({
   blockquote: { borderLeftWidth: 3, borderLeftColor: "#0284c7", paddingLeft: 12, marginVertical: 6 },
 });
 
+// Typing indicator dots
+function TypingIndicator() {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 4 }}>
+      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#9ca3af", opacity: 0.6 }} />
+      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#9ca3af", opacity: 0.8 }} />
+      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#9ca3af", opacity: 1.0 }} />
+    </View>
+  );
+}
+
 export default function ChatScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const [inputText, setInputText] = useState("");
   const flatListRef = useRef<FlatList>(null);
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
-  const parentHeight = useRef(WINDOW_HEIGHT); // Initialize with screen height as fallback
   const hasAutoSelected = useRef(false);
 
-  // Voice features
   const { isRecording, recordingDuration, startRecording, stopRecording, cancelRecording } = useAudioRecorder();
   const { isPlaying, playAudio, stopAudio } = useAudioPlayer();
   const [isTranscribing, setIsTranscribing] = useState(false);
 
-  // Try Keyboard API (works on standard Android, not Expo Go edge-to-edge)
-  useEffect(() => {
-    const showSub = Keyboard.addListener("keyboardDidShow", () => {
-      setKeyboardOpen(true);
-    });
-    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
-      setKeyboardOpen(false);
-    });
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
+  const wakeWordEnabled = useWakeWordStore((s) => s.enabled);
+  const { start: startWakeWord, stop: stopWakeWord, isListening: isWakeWordListening } = useWakeWord({
+    onDetected: () => {
+      router.push({ pathname: "/(tabs)/chat/live", params: { fromWakeWord: "true" } });
+    },
+  });
 
-  // Fallback: onFocus/onBlur for Expo Go edge-to-edge
-  const handleInputFocus = () => {
-    setKeyboardOpen(true);
-  };
-
-  const handleInputBlur = () => {
-    setKeyboardOpen(false);
-  };
+  useFocusEffect(
+    useCallback(() => {
+      if (wakeWordEnabled) {
+        startWakeWord();
+      }
+      return () => {
+        stopWakeWord();
+      };
+    }, [wakeWordEnabled])
+  );
 
   const {
     conversations,
@@ -141,12 +138,13 @@ export default function ChatScreen() {
     clearError,
   } = useChatStore();
 
-  // Load conversations on mount
-  useEffect(() => {
-    loadConversations();
-  }, []);
+  // Reload conversations on every screen focus (e.g. returning from live chat)
+  useFocusEffect(
+    useCallback(() => {
+      loadConversations();
+    }, [])
+  );
 
-  // Auto-select the latest conversation only on initial mount
   useEffect(() => {
     if (
       !hasAutoSelected.current &&
@@ -159,31 +157,33 @@ export default function ChatScreen() {
     }
   }, [conversations]);
 
-  // Scroll to bottom when messages change or streaming content updates
-  const scrollToBottom = () => {
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 150);
-  };
+  // Build display data: messages reversed for inverted FlatList + streaming bubble
+  const displayData = useMemo(() => {
+    const items: (Message | { id: string; role: "assistant"; content: string; created_at: string; isStreaming: true })[] = [];
 
-  useEffect(() => {
-    if (messages.length > 0) {
-      scrollToBottom();
+    // Add streaming message as first item (shows at bottom in inverted list)
+    if (isStreaming) {
+      items.push({
+        id: "streaming",
+        role: "assistant",
+        content: streamingContent || "",
+        created_at: new Date().toISOString(),
+        isStreaming: true as const,
+      });
     }
-  }, [messages.length]);
 
-  useEffect(() => {
-    if (streamingContent) {
-      scrollToBottom();
+    // Messages in reverse order (newest first for inverted list)
+    for (let i = messages.length - 1; i >= 0; i--) {
+      items.push(messages[i]);
     }
-  }, [streamingContent]);
+
+    return items;
+  }, [messages, isStreaming, streamingContent]);
 
   const handleSend = async () => {
     if (!inputText.trim() || isStreaming) return;
-
     const messageToSend = inputText.trim();
     setInputText("");
-
     await sendMessage(messageToSend);
   };
 
@@ -193,19 +193,12 @@ export default function ChatScreen() {
 
     setIsTranscribing(true);
     try {
-      // Transcribe
       const text = await voiceService.transcribe(uri);
       if (!text.trim()) {
         console.warn("Empty transcription");
         return;
       }
-
-      // Send as text message
       await sendMessage(text);
-
-      // TTS for ALICE response (optional - try, don't fail)
-      // We'll get the last assistant message after sendMessage completes
-      // For now, the text response is sufficient
     } catch (error) {
       console.error("Voice send failed:", error);
     } finally {
@@ -213,94 +206,80 @@ export default function ChatScreen() {
     }
   };
 
-  const renderMessage = ({ item }: { item: Message }) => {
+  const renderMessage = ({ item }: { item: any }) => {
     const isUser = item.role === "user";
+    const isStreamingMsg = "isStreaming" in item;
     const mdStyles = isDark ? mdStylesDark : mdStylesLight;
 
     return (
-      <View
-        className={`flex-row mb-4 ${isUser ? "justify-end" : "justify-start"}`}
-      >
+      <View style={{ flexDirection: "row", marginBottom: 12, justifyContent: isUser ? "flex-end" : "flex-start" }}>
         <View
-          className={`max-w-[80%] px-4 py-3 rounded-2xl ${
-            isUser
-              ? "bg-primary-600 rounded-br-sm"
-              : "bg-gray-200 dark:bg-gray-700 rounded-bl-sm"
-          }`}
+          style={{
+            maxWidth: "80%",
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            borderRadius: 18,
+            ...(isUser
+              ? {
+                  backgroundColor: "#0284c7",
+                  borderBottomRightRadius: 4,
+                }
+              : {
+                  backgroundColor: isDark ? "#374151" : "#e5e7eb",
+                  borderBottomLeftRadius: 4,
+                }),
+          }}
         >
           {isUser ? (
-            <Text className="text-base text-white">{item.content}</Text>
+            <Text style={{ fontSize: 16, color: "#ffffff", lineHeight: 22 }}>{item.content}</Text>
+          ) : isStreamingMsg && !item.content ? (
+            <TypingIndicator />
           ) : (
             <Markdown style={mdStyles}>{formatMarkdown(item.content || "")}</Markdown>
           )}
+          {isStreamingMsg && item.content ? (
+            <View style={{ marginTop: 4 }}>
+              <TypingIndicator />
+            </View>
+          ) : null}
         </View>
       </View>
     );
   };
 
-  const renderStreamingMessage = () => {
-    if (!streamingContent) return null;
-    const mdStyles = isDark ? mdStylesDark : mdStylesLight;
-
-    return (
-      <View className="flex-row mb-4 justify-start">
-        <View className="max-w-[80%] px-4 py-3 rounded-2xl bg-gray-200 dark:bg-gray-700 rounded-bl-sm">
-          <Markdown style={mdStyles}>{formatMarkdown(streamingContent || "")}</Markdown>
-          <View className="mt-2">
-            <ActivityIndicator size="small" color="#0284c7" />
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  // Keyboard positioning: use parentHeight (initialized from Dimensions, updated by onLayout)
-  const effectiveHeight = parentHeight.current;
-  const inputBarTop = keyboardOpen ? effectiveHeight * 0.57 : undefined;
-  const inputBarBottom = keyboardOpen ? undefined : 0;
-
-  // Adjust FlatList padding based on keyboard state
-  const listBottomPadding = keyboardOpen
-    ? effectiveHeight * 0.57 + 8
-    : INPUT_BAR_HEIGHT + 8;
+  const hasMessages = messages.length > 0 || isStreaming;
 
   return (
-    <View
+    <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: isDark ? "#111827" : "#ffffff" }}
-      onLayout={(e) => {
-        const h = e.nativeEvent.layout.height;
-        if (h > 0 && !keyboardOpen) {
-          parentHeight.current = h;
-        }
-      }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
       {/* Error Banner */}
       {error && (
-        <View className="bg-red-500 px-4 py-3 flex-row items-center justify-between">
-          <Text className="text-white flex-1 mr-2">{error}</Text>
+        <View style={{ backgroundColor: "#ef4444", paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <Text style={{ color: "#ffffff", flex: 1, marginRight: 8 }}>{error}</Text>
           <TouchableOpacity onPress={clearError}>
             <Ionicons name="close" size={20} color="#ffffff" />
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Loading State — inside main view so onLayout always fires */}
+      {/* Loading State */}
       {isLoading && messages.length === 0 ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
           <ActivityIndicator size="large" color="#0284c7" />
-          <Text className="text-gray-500 dark:text-gray-400 mt-4">
-            Lade Nachrichten...
-          </Text>
+          <Text style={{ color: "#9ca3af", marginTop: 16 }}>Lade Nachrichten...</Text>
         </View>
-      ) : messages.length === 0 && !streamingContent ? (
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 24, paddingBottom: INPUT_BAR_HEIGHT }}>
+      ) : !hasMessages ? (
+        /* Empty State */
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 24 }}>
           <Ionicons name="chatbubbles-outline" size={64} color="#0284c7" />
-          <Text className="text-2xl font-bold text-gray-900 dark:text-white mt-4 text-center">
+          <Text style={{ fontSize: 24, fontWeight: "700", color: isDark ? "#ffffff" : "#111827", marginTop: 16, textAlign: "center" }}>
             Hallo! Ich bin ALICE
           </Text>
-          <Text className="text-gray-500 dark:text-gray-400 text-base mt-2 text-center">
-            Dein persönlicher ADHS-Coach. Stelle mir eine Frage oder erzähle mir,
-            wie es dir geht.
+          <Text style={{ color: "#9ca3af", fontSize: 16, marginTop: 8, textAlign: "center" }}>
+            Dein persönlicher ADHS-Coach. Stelle mir eine Frage oder erzähle mir, wie es dir geht.
           </Text>
           <TouchableOpacity
             onPress={() => router.push("/(tabs)/chat/live")}
@@ -322,45 +301,70 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       ) : (
+        /* Message List — inverted so newest messages are at bottom */
         <FlatList
           ref={flatListRef}
-          data={messages}
+          data={displayData}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: listBottomPadding }}
-          ListFooterComponent={renderStreamingMessage()}
-          onContentSizeChange={scrollToBottom}
+          inverted
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
         />
       )}
 
-      {/* Input Bar — absolutely positioned */}
+      {/* Wake Word Indicator */}
+      {isWakeWordListening && (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            paddingVertical: 4,
+            backgroundColor: isDark ? "#111827" : "#ffffff",
+          }}
+        >
+          <View
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: "#22c55e",
+              marginRight: 6,
+            }}
+          />
+          <Text style={{ color: "#22c55e", fontSize: 12, fontWeight: "500" }}>
+            Hey Alice
+          </Text>
+        </View>
+      )}
+
+      {/* Input Bar — part of the layout flow, not absolute */}
       <View
         style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          top: inputBarTop,
-          bottom: inputBarBottom,
           backgroundColor: isDark ? "#111827" : "#ffffff",
           borderTopWidth: 1,
           borderTopColor: isDark ? "#374151" : "#e5e7eb",
-          paddingHorizontal: 16,
-          paddingVertical: 12,
+          paddingHorizontal: 12,
+          paddingTop: 8,
+          paddingBottom: 8,
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          {/* Mic Button — toggle: tap to start, tap to stop */}
+        <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8 }}>
+          {/* Mic Button */}
           <TouchableOpacity
             onPress={isRecording ? handleVoiceSend : startRecording}
             disabled={isStreaming || isTranscribing}
             style={{
-              width: 48,
-              height: 48,
-              borderRadius: 24,
+              width: 44,
+              height: 44,
+              borderRadius: 22,
               alignItems: "center",
               justifyContent: "center",
               backgroundColor: isRecording ? "#dc2626" : isTranscribing ? "#d1d5db" : isDark ? "#1f2937" : "#f3f4f6",
+              marginBottom: 2,
             }}
             accessibilityLabel={isRecording ? "Aufnahme stoppen" : "Sprachnachricht aufnehmen"}
           >
@@ -375,9 +379,9 @@ export default function ChatScreen() {
             )}
           </TouchableOpacity>
 
-          {/* Show recording indicator instead of text input when recording */}
+          {/* Recording indicator or Text input */}
           {isRecording ? (
-            <View style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 12 }}>
+            <View style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", height: 44 }}>
               <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#dc2626", marginRight: 8 }} />
               <Text style={{ color: isDark ? "#ffffff" : "#111827", fontSize: 16 }}>
                 {`${Math.floor(recordingDuration / 60)}:${(recordingDuration % 60).toString().padStart(2, "0")}`}
@@ -390,11 +394,13 @@ export default function ChatScreen() {
                 backgroundColor: isDark ? "#1f2937" : "#f3f4f6",
                 borderWidth: 1,
                 borderColor: isDark ? "#374151" : "#d1d5db",
-                borderRadius: 9999,
+                borderRadius: 22,
                 paddingHorizontal: 16,
-                paddingVertical: 12,
+                paddingTop: 10,
+                paddingBottom: 10,
                 color: isDark ? "#ffffff" : "#111827",
                 fontSize: 16,
+                maxHeight: 120,
               }}
               placeholder="Nachricht schreiben..."
               placeholderTextColor="#9ca3af"
@@ -403,10 +409,7 @@ export default function ChatScreen() {
               multiline
               maxLength={1000}
               editable={!isStreaming}
-              onSubmitEditing={handleSend}
               blurOnSubmit={false}
-              onFocus={handleInputFocus}
-              onBlur={handleInputBlur}
             />
           )}
 
@@ -415,13 +418,13 @@ export default function ChatScreen() {
             onPress={handleSend}
             disabled={!inputText.trim() || isStreaming}
             style={{
-              width: 48,
-              height: 48,
-              borderRadius: 24,
+              width: 44,
+              height: 44,
+              borderRadius: 22,
               alignItems: "center",
               justifyContent: "center",
-              backgroundColor:
-                inputText.trim() && !isStreaming ? "#0284c7" : isDark ? "#374151" : "#d1d5db",
+              backgroundColor: inputText.trim() && !isStreaming ? "#0284c7" : isDark ? "#374151" : "#d1d5db",
+              marginBottom: 2,
             }}
             accessibilityLabel="Nachricht senden"
           >
@@ -437,6 +440,6 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }

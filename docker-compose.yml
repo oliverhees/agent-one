@@ -45,7 +45,7 @@ services:
       - alice-network
 
   falkordb:
-    image: falkordb/falkordb:v4.4.1
+    image: falkordb/falkordb:v4.14.11
     container_name: alice-falkordb
     ports:
       - "${FALKORDB_PORT:-6379}:6379"

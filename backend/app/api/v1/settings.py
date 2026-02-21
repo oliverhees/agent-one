@@ -13,6 +13,8 @@ from app.schemas.modules import ModulesResponse, ModulesUpdate, ModuleConfigUpda
 from app.schemas.settings import (
     ADHSSettingsResponse,
     ADHSSettingsUpdate,
+    AIProviderResponse,
+    AIProviderUpdate,
     ApiKeyResponse,
     ApiKeyUpdate,
     OnboardingRequest,
@@ -183,6 +185,47 @@ async def update_voice_providers(
     """
     service = SettingsService(db)
     return await service.update_voice_providers(current_user.id, data)
+
+
+# ===========================================================================
+# AI Provider (GET/PUT /api/v1/settings/ai-provider)
+# ===========================================================================
+
+
+@router.get(
+    "/ai-provider",
+    response_model=AIProviderResponse,
+    summary="Get AI provider setting",
+    dependencies=[Depends(standard_rate_limit)],
+)
+async def get_ai_provider(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get current AI provider setting (anthropic or custom)."""
+    service = SettingsService(db)
+    return await service.get_ai_provider(current_user.id)
+
+
+@router.put(
+    "/ai-provider",
+    response_model=AIProviderResponse,
+    summary="Switch AI provider",
+    dependencies=[Depends(standard_rate_limit)],
+)
+async def update_ai_provider(
+    data: AIProviderUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Switch between AI providers.
+
+    - 'anthropic': Claude (Sonnet/Haiku) via Anthropic API
+    - 'custom': Custom LLM (e.g. Qwen) via vLLM OpenAI-compatible API
+    """
+    service = SettingsService(db)
+    return await service.update_ai_provider(current_user.id, data)
 
 
 # ===========================================================================

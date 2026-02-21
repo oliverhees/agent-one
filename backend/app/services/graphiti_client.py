@@ -266,7 +266,14 @@ class GraphitiClient:
                 group_id=user_id,
             )
 
-            episode_id = str(result.episode_id) if hasattr(result, "episode_id") else str(result)
+            # EpisodicNode uses 'uuid', not 'episode_id'
+            if hasattr(result, "uuid"):
+                episode_id = str(result.uuid)
+            elif hasattr(result, "episode_id"):
+                episode_id = str(result.episode_id)
+            else:
+                episode_id = None
+                logger.warning("add_episode returned unexpected type: %s", type(result).__name__)
             logger.debug("Added episode '%s' for user %s → %s", name, user_id, episode_id)
             return episode_id
         except Exception as exc:

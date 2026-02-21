@@ -27,8 +27,8 @@ DEFAULT_SETTINGS = {
     "display_name": None,
     "onboarding_complete": False,
     "api_keys": {},  # Encrypted API keys: {"anthropic": "encrypted...", "elevenlabs": "encrypted...", "deepgram": "encrypted..."}
-    "stt_provider": "deepgram",  # Default STT provider
-    "tts_provider": "elevenlabs",  # Default TTS provider
+    "stt_provider": "whisper",  # Default STT provider (OpenAI Whisper)
+    "tts_provider": "openai",  # Default TTS provider (OpenAI)
     "active_modules": ["core", "adhs"],  # Default active modules
     "module_configs": {},  # Per-module configuration overrides
 }

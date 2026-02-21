@@ -1,5 +1,6 @@
 """Database configuration and session management."""
 
+from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import (
@@ -87,6 +88,7 @@ async def close_db() -> None:
     await engine.dispose()
 
 
+@asynccontextmanager
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     """
     Create an async session for non-request contexts (WebSocket, background tasks).

@@ -1,7 +1,8 @@
 {
   "expo": {
     "name": "ALICE",
-    "slug": "alice-adhs-coach",
+    "slug": "agent-one",
+    "owner": "hrcodelabs",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -14,9 +15,17 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "ALICE benoetigt Zugriff auf das Mikrofon fuer Spracherkennung und Wake Word Detection."
+      }
     },
     "android": {
+      "permissions": [
+        "RECORD_AUDIO",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -38,7 +47,14 @@
           "color": "#0284c7"
         }
       ],
-      "expo-av"
-    ]
+      "expo-av",
+      "expo-web-browser"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "22611596-005c-4eac-8df0-8e97b12547f8"
+      }
+    }
   }
 }

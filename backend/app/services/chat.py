@@ -246,6 +246,18 @@ class ChatService:
 
         return message
 
+    async def _get_ai_provider(self, user_id: UUID) -> str:
+        """Get the AI provider setting for a user ('anthropic' or 'custom')."""
+        from app.models.user_settings import UserSettings, DEFAULT_SETTINGS
+        result = await self.db.execute(
+            select(UserSettings).where(UserSettings.user_id == user_id)
+        )
+        user_settings = result.scalar_one_or_none()
+        if not user_settings:
+            return "anthropic"
+        merged = {**DEFAULT_SETTINGS, **user_settings.settings}
+        return merged.get("ai_provider", "anthropic")
+
     async def _create_tool_executor(
         self, user_id: UUID
     ) -> Callable[[str, dict], Coroutine]:
@@ -291,6 +303,9 @@ class ChatService:
 
             elif name == "delete_task":
                 return await self._tool_delete_task(user_id, tool_input)
+
+            elif name == "delete_all_tasks":
+                return await self._tool_delete_all_tasks(user_id, tool_input)
 
             elif name == "breakdown_task":
                 return await self._tool_breakdown_task(user_id, tool_input)
@@ -638,6 +653,48 @@ class ChatService:
             "success": True,
             "deleted_title": title,
             "message": f"Aufgabe '{title}' geloescht.",
+        })
+
+    async def _tool_delete_all_tasks(self, user_id: UUID, tool_input: dict) -> str:
+        """Execute the delete_all_tasks tool."""
+        from app.models.task import Task
+
+        if not tool_input.get("confirm"):
+            return json.dumps({
+                "success": False,
+                "error": "Loeschung nicht bestaetigt. Setze confirm=true.",
+            })
+
+        status_filter = tool_input.get("status", "all")
+
+        query = select(Task).where(Task.user_id == user_id)
+        if status_filter and status_filter != "all":
+            query = query.where(Task.status == status_filter)
+
+        result = await self.db.execute(query)
+        tasks = result.scalars().all()
+
+        if not tasks:
+            return json.dumps({
+                "success": True,
+                "deleted_count": 0,
+                "message": "Keine Aufgaben zum Loeschen gefunden.",
+            })
+
+        count = len(tasks)
+        for task in tasks:
+            await self.db.delete(task)
+        await self.db.commit()
+
+        logger.info(
+            "Tool delete_all_tasks: deleted %d tasks (filter=%s) for user %s",
+            count, status_filter, user_id,
+        )
+
+        return json.dumps({
+            "success": True,
+            "deleted_count": count,
+            "message": f"{count} Aufgabe(n) geloescht.",
         })
 
     async def _tool_breakdown_task(self, user_id: UUID, tool_input: dict) -> str:
@@ -1196,6 +1253,12 @@ class ChatService:
             "- User will neue Aufgabe → create_task aufrufen\n"
             "- User will Info speichern → create_brain_entry aufrufen\n"
             "- User fragt nach Fortschritt → get_stats aufrufen\n\n"
+            "### Ehrlichkeit bei Faehigkeiten:\n"
+            "Wenn der User etwas verlangt, das du mit keinem deiner Tools umsetzen kannst, "
+            "sage EHRLICH und SOFORT: 'Das kann ich leider noch nicht.' und erklaere kurz warum. "
+            "Sag NIEMALS 'Ja, das mache ich!' wenn du kein passendes Tool dafuer hast. "
+            "Beispiel: Der User fragt 'Sende eine E-Mail' → Du hast kein E-Mail-Tool → "
+            "'Das kann ich leider noch nicht. Ich habe aktuell keine E-Mail-Funktion.'\n\n"
             "### Allgemeine Regeln:\n"
             "1. IMMER zuerst list_tasks pruefen bevor neue Tasks erstellt werden\n"
             "2. Proaktiv Brain nutzen — wichtige Infos automatisch speichern\n"
@@ -1245,6 +1308,181 @@ class ChatService:
 
         return base_prompt
 
+    async def _get_recent_conversation_context(
+        self,
+        user_id: UUID,
+        exclude_conversation_id: UUID | None = None,
+        max_messages: int = 10,
+    ) -> str:
+        """Load recent messages from today's conversations for voice context.
+
+        Single efficient query: joins messages with conversations, filters by
+        user and date, excludes current conversation. No N+1 problem.
+        """
+        from datetime import datetime, timezone, timedelta
+
+        # Use UTC for comparison (DB stores UTC)
+        now_utc = datetime.now(timezone.utc)
+        today_start_utc = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # Single query: get recent messages from today's other conversations
+        result = await self.db.execute(
+            select(Message)
+            .join(Conversation, Message.conversation_id == Conversation.id)
+            .where(
+                Conversation.user_id == user_id,
+                Conversation.id != exclude_conversation_id if exclude_conversation_id else True,
+                Message.created_at >= today_start_utc,
+            )
+            .order_by(desc(Message.created_at))
+            .limit(max_messages)
+        )
+        messages = list(reversed(result.scalars().all()))
+
+        if not messages:
+            logger.info("Voice context: no earlier messages found today for user %s", user_id)
+            return ""
+
+        context_lines = []
+        for msg in messages:
+            role_label = "User" if msg.role == MessageRole.USER else "Alice"
+            short = msg.content[:120]
+            time_str = msg.created_at.strftime("%H:%M") if msg.created_at else ""
+            context_lines.append(f"[{time_str}] {role_label}: {short}")
+
+        logger.info("Voice context: loaded %d earlier messages for user %s", len(context_lines), user_id)
+
+        return (
+            "\n\n## Fruehere Gespraeche heute\n"
+            "Das habt ihr heute bereits besprochen. Beziehe dich darauf wenn passend:\n"
+            + "\n".join(context_lines)
+        )
+
+    async def send_message_voice(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        content: str,
+        on_intermediate_text=None,
+    ) -> str:
+        """
+        Voice-optimized message handler: fast model, short prompt, memory-aware.
+
+        Uses Haiku 4.5 for ~3-5x faster responses than Sonnet.
+        Includes recent conversation context for continuity.
+        """
+        # Save user message
+        await self.save_message(
+            conversation_id=conversation_id,
+            role=MessageRole.USER,
+            content=content,
+        )
+
+        # Get recent history (fewer messages for speed)
+        messages, _, _ = await self.get_messages(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            limit=6,
+        )
+
+        api_messages = []
+        for msg in messages:
+            api_messages.append({
+                "role": msg.role.value if msg.role != MessageRole.SYSTEM else "user",
+                "content": msg.content,
+            })
+
+        # Short voice-optimized system prompt
+        try:
+            from app.models.user import User
+            user = await self.db.get(User, user_id)
+            display_name = user.display_name if user else "du"
+        except Exception:
+            display_name = "du"
+
+        voice_prompt = (
+            f"Du bist ALICE, eine freundliche und empathische KI-Assistentin. "
+            f"Du sprichst mit {display_name} per Sprache.\n\n"
+            "Wichtig fuer Sprachausgabe:\n"
+            "- Antworte KURZ und praegnant (1-3 Saetze)\n"
+            "- Verwende natuerliche, gesprochene Sprache\n"
+            "- Keine Aufzaehlungen, kein Markdown, keine Sonderzeichen\n"
+            "- Sei warm, persoenlich und ermutigend\n"
+            "- Stelle Rueckfragen statt lange Monologe zu halten\n"
+            "- Nutze Tools nur wenn der User explizit eine Aktion verlangt\n"
+            "- Wenn du ein Tool benutzt, sage vorher kurz Bescheid "
+            "(z.B. 'Moment, ich schaue nach!' oder 'Klar, mache ich!')"
+        )
+
+        # Add context from today's earlier conversations
+        try:
+            earlier_context = await self._get_recent_conversation_context(
+                user_id=user_id,
+                exclude_conversation_id=conversation_id,
+            )
+            if earlier_context:
+                voice_prompt += earlier_context
+        except Exception:
+            logger.warning("Voice: Failed to load conversation context")
+
+        # Note: Graphiti enrichment removed from voice path for latency (~2s savings).
+        # Cross-session memory is handled by _get_recent_conversation_context() above.
+        # Graphiti still STORES episodes after each voice message (see below).
+
+        # Create tool executor for tool support
+        tool_executor = await self._create_tool_executor(user_id)
+
+        # Voice AI call — route to correct provider
+        ai_provider = await self._get_ai_provider(user_id)
+        if ai_provider == "custom":
+            response_text = await self.ai_service.get_response_custom_llm(
+                messages=api_messages,
+                system_prompt=voice_prompt,
+                tool_executor=tool_executor,
+                max_tokens=300,
+            )
+        else:
+            response_text = await self.ai_service.get_response_with_tools(
+                messages=api_messages,
+                system_prompt=voice_prompt,
+                tool_executor=tool_executor,
+                model="claude-haiku-4-5-20251001",
+                max_tokens=300,
+                max_tool_iterations=2,
+                on_intermediate_text=on_intermediate_text,
+            )
+
+        # Save assistant message
+        await self.save_message(
+            conversation_id=conversation_id,
+            role=MessageRole.ASSISTANT,
+            content=response_text,
+        )
+
+        # Process episode async for memory system (non-blocking)
+        try:
+            from app.services.graphiti_client import get_graphiti_client
+            from app.services.memory import MemoryService
+
+            graphiti = get_graphiti_client()
+            if graphiti.enabled:
+                messages_for_analysis = [
+                    {"role": m.role.value, "content": m.content}
+                    for m in messages
+                ] + [
+                    {"role": "user", "content": content},
+                    {"role": "assistant", "content": response_text},
+                ]
+                asyncio.create_task(
+                    self._process_episode_background(
+                        graphiti, str(user_id), str(conversation_id), messages_for_analysis
+                    )
+                )
+        except Exception:
+            logger.warning("Voice: Failed to schedule episode processing")
+
+        return response_text
+
     async def send_message_simple(
         self,
         user_id: UUID,
@@ -1293,12 +1531,20 @@ class ChatService:
         # Build dynamic system prompt with user context
         system_prompt = await self._build_system_prompt(user_id, user_message=content)
 
-        # Get full response with tool use
-        response_text = await self.ai_service.get_response_with_tools(
-            messages=api_messages,
-            system_prompt=system_prompt,
-            tool_executor=tool_executor,
-        )
+        # Route to correct AI provider
+        ai_provider = await self._get_ai_provider(user_id)
+        if ai_provider == "custom":
+            response_text = await self.ai_service.get_response_custom_llm(
+                messages=api_messages,
+                system_prompt=system_prompt,
+                tool_executor=tool_executor,
+            )
+        else:
+            response_text = await self.ai_service.get_response_with_tools(
+                messages=api_messages,
+                system_prompt=system_prompt,
+                tool_executor=tool_executor,
+            )
 
         # Save assistant message
         await self.save_message(
@@ -1380,12 +1626,20 @@ class ChatService:
         # Build dynamic system prompt with user context
         system_prompt = await self._build_system_prompt(user_id, user_message=user_message)
 
-        # Get full response with tool use
-        response_text = await self.ai_service.get_response_with_tools(
-            messages=api_messages,
-            system_prompt=system_prompt,
-            tool_executor=tool_executor,
-        )
+        # Route to correct AI provider
+        ai_provider = await self._get_ai_provider(user_id)
+        if ai_provider == "custom":
+            response_text = await self.ai_service.get_response_custom_llm(
+                messages=api_messages,
+                system_prompt=system_prompt,
+                tool_executor=tool_executor,
+            )
+        else:
+            response_text = await self.ai_service.get_response_with_tools(
+                messages=api_messages,
+                system_prompt=system_prompt,
+                tool_executor=tool_executor,
+            )
 
         # Yield word-by-word for SSE streaming effect, preserving newlines
         for line_idx, line in enumerate(response_text.split("\n")):

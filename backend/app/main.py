@@ -1,9 +1,16 @@
 """Main FastAPI application entry point."""
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# Configure logging so logger.info() actually outputs
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 from app import __version__
 from app.core.config import settings

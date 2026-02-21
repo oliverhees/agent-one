@@ -1,14 +1,14 @@
 """Phase 11: Multi-Agent & Trust System tables.
 
-Revision ID: 009
-Revises: 008
+Revision ID: 009_phase11_agents
+Revises: 008_phase10_integrations
 """
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID, JSON
 
-revision = "009"
-down_revision = "008"
+revision = "009_phase11_agents"
+down_revision = "008_phase10_integrations"
 branch_labels = None
 depends_on = None
 

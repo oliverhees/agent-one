@@ -46,13 +46,17 @@ class ElevenLabsTTS(TTSProvider):
             try:
                 response = await client.post(
                     f"{self.base_url}/text-to-speech/{voice}",
+                    params={
+                        "output_format": "mp3_22050_32",
+                        "optimize_streaming_latency": "4",
+                    },
                     headers={
                         "xi-api-key": self.api_key,
                         "Content-Type": "application/json",
                     },
                     json={
                         "text": text,
-                        "model_id": "eleven_multilingual_v2",
+                        "model_id": "eleven_flash_v2_5",
                     },
                 )
                 response.raise_for_status()

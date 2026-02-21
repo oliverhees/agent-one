@@ -155,24 +155,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   loadStoredAuth: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, error: null });
     try {
       const accessToken = await getSecure(STORAGE_KEYS.ACCESS_TOKEN);
       const refreshToken = await getSecure(STORAGE_KEYS.REFRESH_TOKEN);
 
       if (accessToken && refreshToken) {
-        // Versuche User-Daten zu laden
+        // Set tokens in state
+        set({ accessToken, refreshToken });
+
         try {
+          // getMe() goes through the API interceptor which auto-refreshes on 401
           const user = await authService.getMe();
+
+          // Re-read tokens from SecureStore (interceptor may have refreshed them)
+          const updatedAccessToken = await getSecure(STORAGE_KEYS.ACCESS_TOKEN);
+          const updatedRefreshToken = await getSecure(STORAGE_KEYS.REFRESH_TOKEN);
+
           set({
             user,
-            accessToken,
-            refreshToken,
+            accessToken: updatedAccessToken || accessToken,
+            refreshToken: updatedRefreshToken || refreshToken,
             isAuthenticated: true,
             isLoading: false,
           });
         } catch (error) {
-          // Token ungültig → Clear
+          // Interceptor already tried refresh. If we're here, both tokens are invalid.
           await clearAllSecure();
           set({
             user: null,

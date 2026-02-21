@@ -188,6 +188,33 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
+          onPress={() => router.push("/(tabs)/settings/ai-provider")}
+          accessibilityLabel="KI-Modell auswaehlen"
+        >
+          <Card className="mb-4">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center">
+                <Ionicons
+                  name="hardware-chip-outline"
+                  size={20}
+                  color="#0284c7"
+                  style={{ marginRight: 10 }}
+                />
+                <View>
+                  <Text className="text-lg font-semibold text-gray-900 dark:text-white">
+                    KI-Modell
+                  </Text>
+                  <Text className="text-sm text-gray-500 dark:text-gray-400">
+                    Anthropic oder Custom LLM
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </View>
+          </Card>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           onPress={() => router.push("/(tabs)/settings/voice-providers")}
           accessibilityLabel="Voice Provider konfigurieren"
         >
@@ -213,6 +240,111 @@ export default function SettingsScreen() {
             </View>
           </Card>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => router.push("/(tabs)/settings/wake-word")}
+          accessibilityLabel="Wake Word konfigurieren"
+        >
+          <Card className="mb-4">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center">
+                <Ionicons
+                  name="ear-outline"
+                  size={20}
+                  color="#0284c7"
+                  style={{ marginRight: 10 }}
+                />
+                <View>
+                  <Text className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Wake Word
+                  </Text>
+                  <Text className="text-sm text-gray-500 dark:text-gray-400">
+                    "Hey Alice" Aktivierung
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </View>
+          </Card>
+        </TouchableOpacity>
+
+        <Card className="mb-4">
+          <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+            Agent-System
+          </Text>
+
+          <TouchableOpacity
+            onPress={() => router.push("/(tabs)/settings/agent-trust")}
+            accessibilityLabel="Agent Vertrauen verwalten"
+            className="flex-row items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800"
+          >
+            <View className="flex-row items-center">
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={20}
+                color="#0284c7"
+                style={{ marginRight: 10 }}
+              />
+              <View>
+                <Text className="font-semibold text-gray-900 dark:text-white">
+                  Vertrauen & Autonomie
+                </Text>
+                <Text className="text-sm text-gray-500 dark:text-gray-400">
+                  Trust Levels der Agents steuern
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => router.push("/(tabs)/settings/agent-approvals")}
+            accessibilityLabel="Agent Genehmigungen"
+            className="flex-row items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800"
+          >
+            <View className="flex-row items-center">
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={20}
+                color="#0284c7"
+                style={{ marginRight: 10 }}
+              />
+              <View>
+                <Text className="font-semibold text-gray-900 dark:text-white">
+                  Genehmigungen
+                </Text>
+                <Text className="text-sm text-gray-500 dark:text-gray-400">
+                  Ausstehende Agent-Aktionen pruefen
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => router.push("/(tabs)/settings/email-config")}
+            accessibilityLabel="Email Konfiguration"
+            className="flex-row items-center justify-between py-3"
+          >
+            <View className="flex-row items-center">
+              <Ionicons
+                name="mail-outline"
+                size={20}
+                color="#0284c7"
+                style={{ marginRight: 10 }}
+              />
+              <View>
+                <Text className="font-semibold text-gray-900 dark:text-white">
+                  Email-Agent
+                </Text>
+                <Text className="text-sm text-gray-500 dark:text-gray-400">
+                  SMTP/IMAP Konfiguration
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+          </TouchableOpacity>
+        </Card>
 
         <Card className="mb-4">
           <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-2">

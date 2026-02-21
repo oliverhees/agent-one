@@ -215,6 +215,29 @@ ALICE_TOOLS = [
         },
     },
     {
+        "name": "delete_all_tasks",
+        "description": (
+            "Loesche ALLE Aufgaben des Benutzers permanent. Nutze dies wenn der User "
+            "ausdruecklich sagt, dass alle Aufgaben/Tasks geloescht werden sollen. "
+            "Optional kann nach Status gefiltert werden."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "enum": ["open", "in_progress", "done", "cancelled", "all"],
+                    "description": "Nur Tasks mit diesem Status loeschen. 'all' loescht alle.",
+                },
+                "confirm": {
+                    "type": "boolean",
+                    "description": "Muss true sein um die Loeschung zu bestaetigen.",
+                },
+            },
+            "required": ["confirm"],
+        },
+    },
+    {
         "name": "breakdown_task",
         "description": (
             "Zerlege eine grosse Aufgabe in kleine, machbare Sub-Tasks (3-7 Schritte). "
@@ -436,11 +459,56 @@ class AIService:
         self.base_url = "https://api.anthropic.com/v1"
         self.model = "claude-sonnet-4-5-20250929"
 
+    async def get_response_voice(
+        self,
+        messages: list[dict],
+        system_prompt: str,
+    ) -> str:
+        """Fast voice response using Haiku - no tools, short output."""
+        if not self.api_key:
+            return "Hallo! Ich bin ALICE. (Mock-Modus)"
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/messages",
+                    headers={
+                        "x-api-key": self.api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": "claude-haiku-4-5-20251001",
+                        "max_tokens": 300,
+                        "system": system_prompt,
+                        "messages": messages,
+                    },
+                )
+
+                if response.status_code != 200:
+                    logger.error("Voice AI error: %s", response.text[:200])
+                    return "Entschuldigung, ich konnte gerade nicht antworten."
+
+                result = response.json()
+                text_parts = []
+                for block in result.get("content", []):
+                    if block.get("type") == "text":
+                        text_parts.append(block["text"])
+                return "\n".join(text_parts) or "..."
+
+        except Exception as e:
+            logger.error("Voice AI error: %s", e)
+            return "Entschuldigung, es gab einen Fehler."
+
     async def get_response_with_tools(
         self,
         messages: list[dict],
         system_prompt: str,
         tool_executor,
+        model: str | None = None,
+        max_tokens: int | None = None,
+        max_tool_iterations: int | None = None,
+        on_intermediate_text=None,
     ) -> str:
         """
         Get response from Claude with tool use support.
@@ -468,7 +536,8 @@ class AIService:
             )
 
         current_messages = list(messages)
-        max_iterations = 10  # prevent infinite tool loops
+        all_text_parts = []  # Collect text from ALL responses (including intermediate)
+        max_iterations = max_tool_iterations or 10  # prevent infinite tool loops
 
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
@@ -481,8 +550,8 @@ class AIService:
                             "content-type": "application/json",
                         },
                         json={
-                            "model": self.model,
-                            "max_tokens": 4096,
+                            "model": model or self.model,
+                            "max_tokens": max_tokens or 4096,
                             "system": system_prompt,
                             "messages": current_messages,
                             "tools": ALICE_TOOLS,
@@ -504,13 +573,25 @@ class AIService:
                         len(content_blocks),
                     )
 
-                    # If Claude finished without requesting tools, extract text
-                    if stop_reason != "tool_use":
-                        text_parts = []
+                    # Handle text from this response
+                    if stop_reason == "tool_use" and on_intermediate_text:
+                        # Tool call coming: send intermediate text immediately via callback
+                        intermediate = " ".join(
+                            b["text"] for b in content_blocks
+                            if b.get("type") == "text" and b["text"].strip()
+                        )
+                        if intermediate:
+                            logger.info("Intermediate text (pre-tool): '%s'", intermediate[:80])
+                            await on_intermediate_text(intermediate)
+                    else:
+                        # Final response or no callback: collect text normally
                         for block in content_blocks:
-                            if block.get("type") == "text":
-                                text_parts.append(block["text"])
-                        final_text = "\n".join(text_parts) or "..."
+                            if block.get("type") == "text" and block["text"].strip():
+                                all_text_parts.append(block["text"])
+
+                    # If Claude finished without requesting tools, return all text
+                    if stop_reason != "tool_use":
+                        final_text = " ".join(all_text_parts) or "..."
                         logger.info(
                             "Claude final response (%d chars, stop=%s)",
                             len(final_text),
@@ -614,3 +695,183 @@ class AIService:
     async def _noop_executor(name: str, tool_input: dict) -> str:
         """No-op tool executor for legacy streaming mode."""
         return json.dumps({"error": "Tools not available in this context"})
+
+    async def get_response_custom_llm(
+        self,
+        messages: list[dict],
+        system_prompt: str,
+        base_url: str | None = None,
+        model: str | None = None,
+        api_key: str | None = None,
+        max_tokens: int = 4096,
+        tool_executor=None,
+    ) -> str:
+        """
+        Get response from an OpenAI-compatible API (vLLM, Ollama, etc.).
+
+        Supports tool use if the model handles it. Falls back to plain chat
+        if tools are not supported.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content'
+            system_prompt: System prompt for the AI
+            base_url: API base URL (e.g. http://gpu-server:8000/v1)
+            model: Model name (e.g. Qwen/Qwen2.5-14B-Instruct-AWQ)
+            api_key: Optional API key
+            max_tokens: Maximum tokens in response
+            tool_executor: Optional async callable for tool execution
+
+        Returns:
+            str: The final text response
+        """
+        url = base_url or settings.custom_llm_base_url
+        mdl = model or settings.custom_llm_model
+        key = api_key or settings.custom_llm_api_key
+
+        if not url:
+            raise AIServiceUnavailableError(
+                detail="Custom LLM not configured (CUSTOM_LLM_BASE_URL missing)"
+            )
+
+        # Convert to OpenAI message format (system as first message)
+        openai_messages = [{"role": "system", "content": system_prompt}]
+        for msg in messages:
+            content = msg["content"]
+            # Flatten Anthropic content blocks to plain text
+            if isinstance(content, list):
+                content = " ".join(
+                    b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"
+                )
+            openai_messages.append({"role": msg["role"], "content": content})
+
+        headers = {"Content-Type": "application/json"}
+        if key:
+            headers["Authorization"] = f"Bearer {key}"
+
+        # Build request body
+        body: dict = {
+            "model": mdl,
+            "messages": openai_messages,
+            "max_tokens": max_tokens,
+            "temperature": 0.7,
+        }
+
+        # Add tools if executor provided (OpenAI tool format)
+        tools_enabled = False
+        if tool_executor:
+            openai_tools = []
+            for tool in ALICE_TOOLS:
+                openai_tools.append({
+                    "type": "function",
+                    "function": {
+                        "name": tool["name"],
+                        "description": tool["description"],
+                        "parameters": tool["input_schema"],
+                    },
+                })
+            body["tools"] = openai_tools
+            tools_enabled = True
+
+        max_iterations = 10
+        all_text_parts = []
+
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                for _ in range(max_iterations):
+                    response = await client.post(
+                        f"{url}/chat/completions",
+                        headers=headers,
+                        json=body,
+                    )
+
+                    # If server doesn't support tool calling, retry without tools
+                    if response.status_code == 400 and tools_enabled:
+                        error_text = response.text
+                        if "tool" in error_text.lower():
+                            logger.warning(
+                                "Custom LLM does not support tool calling, retrying without tools"
+                            )
+                            body.pop("tools", None)
+                            tools_enabled = False
+                            response = await client.post(
+                                f"{url}/chat/completions",
+                                headers=headers,
+                                json=body,
+                            )
+
+                    if response.status_code != 200:
+                        logger.error(
+                            "Custom LLM error (%s): %s",
+                            response.status_code,
+                            response.text[:300],
+                        )
+                        raise AIServiceUnavailableError(
+                            detail=f"Custom LLM error: {response.status_code}"
+                        )
+
+                    result = response.json()
+                    choice = result["choices"][0]
+                    message = choice["message"]
+                    finish_reason = choice.get("finish_reason", "stop")
+
+                    logger.info(
+                        "Custom LLM response: model=%s, finish=%s",
+                        mdl, finish_reason,
+                    )
+
+                    # Collect text content
+                    if message.get("content"):
+                        all_text_parts.append(message["content"])
+
+                    # Handle tool calls (OpenAI format)
+                    tool_calls = message.get("tool_calls")
+                    if tool_calls and tool_executor:
+                        # Add assistant message with tool calls
+                        openai_messages.append(message)
+
+                        for tc in tool_calls:
+                            func = tc["function"]
+                            tool_name = func["name"]
+                            try:
+                                tool_input = json.loads(func["arguments"])
+                            except json.JSONDecodeError:
+                                tool_input = {}
+
+                            logger.info(
+                                "Custom LLM tool call: %s(%s)",
+                                tool_name,
+                                json.dumps(tool_input, ensure_ascii=False)[:200],
+                            )
+
+                            try:
+                                result_str = await tool_executor(tool_name, tool_input)
+                            except Exception as e:
+                                result_str = json.dumps({"error": str(e)})
+
+                            # Add tool result
+                            openai_messages.append({
+                                "role": "tool",
+                                "tool_call_id": tc["id"],
+                                "content": result_str,
+                            })
+
+                        # Update body with new messages for next iteration
+                        body["messages"] = openai_messages
+                        continue
+
+                    # No tool calls → done
+                    return " ".join(all_text_parts) or "..."
+
+                return "Entschuldigung, ich konnte die Anfrage nicht abschliessen."
+
+        except httpx.RequestError as e:
+            raise AIServiceUnavailableError(
+                detail=f"Custom LLM connection failed: {str(e)}"
+            )
+        except AIServiceUnavailableError:
+            raise
+        except Exception as e:
+            logger.error("Custom LLM unexpected error: %s", e, exc_info=True)
+            raise AIServiceUnavailableError(
+                detail=f"Custom LLM error: {str(e)}"
+            )

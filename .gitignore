@@ -74,3 +74,15 @@ test.db
 
 # Misc
 setup-agency-v2-final.sh
+
+# Coverage
+coverage.xml
+backend/coverage.xml
+*.cover
+
+# Stray files
+Dieses
+Intern:
+
+# Wake word models (binary, zu gross)
+mobile/assets/wakewords/

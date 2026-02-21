@@ -14,6 +14,8 @@ from app.schemas.modules import ModuleInfoResponse, ModulesResponse, ModulesUpda
 from app.schemas.settings import (
     ADHSSettingsResponse,
     ADHSSettingsUpdate,
+    AIProviderUpdate,
+    AIProviderResponse,
     ApiKeyUpdate,
     ApiKeyResponse,
     VoiceProviderUpdate,
@@ -246,6 +248,42 @@ class SettingsService:
         return VoiceProviderResponse(
             stt_provider=current_settings.get("stt_provider", "deepgram"),
             tts_provider=current_settings.get("tts_provider", "elevenlabs"),
+        )
+
+    # -----------------------------------------------------------------------
+    # AI Provider management
+    # -----------------------------------------------------------------------
+
+    async def get_ai_provider(self, user_id: UUID) -> AIProviderResponse:
+        """Get current AI provider setting."""
+        from app.core.config import settings as app_settings
+
+        user_settings = await self._get_or_create_settings(user_id)
+        current = {**DEFAULT_SETTINGS, **user_settings.settings}
+
+        return AIProviderResponse(
+            ai_provider=current.get("ai_provider", "anthropic"),
+            custom_llm_available=bool(app_settings.custom_llm_base_url),
+            custom_llm_model=app_settings.custom_llm_model if app_settings.custom_llm_base_url else None,
+        )
+
+    async def update_ai_provider(self, user_id: UUID, data: AIProviderUpdate) -> AIProviderResponse:
+        """Update AI provider setting."""
+        from app.core.config import settings as app_settings
+
+        user_settings = await self._get_or_create_settings(user_id)
+        current = {**DEFAULT_SETTINGS, **user_settings.settings}
+
+        current["ai_provider"] = data.ai_provider
+
+        user_settings.settings = current
+        attributes.flag_modified(user_settings, "settings")
+        await self.db.flush()
+
+        return AIProviderResponse(
+            ai_provider=data.ai_provider,
+            custom_llm_available=bool(app_settings.custom_llm_base_url),
+            custom_llm_model=app_settings.custom_llm_model if app_settings.custom_llm_base_url else None,
         )
 
     # -----------------------------------------------------------------------

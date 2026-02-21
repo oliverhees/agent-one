@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
 
+    # Custom LLM (vLLM / OpenAI-compatible)
+    custom_llm_base_url: str = Field(default="", alias="CUSTOM_LLM_BASE_URL")
+    custom_llm_model: str = Field(default="Qwen/Qwen2.5-14B-Instruct-AWQ", alias="CUSTOM_LLM_MODEL")
+    custom_llm_api_key: str = Field(default="", alias="CUSTOM_LLM_API_KEY")
+
     # Google Calendar OAuth
     google_client_id: str = Field(default="", alias="GOOGLE_CLIENT_ID")
     google_client_secret: str = Field(default="", alias="GOOGLE_CLIENT_SECRET")

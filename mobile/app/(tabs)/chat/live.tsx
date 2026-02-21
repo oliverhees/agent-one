@@ -8,12 +8,14 @@ import {
   StatusBar,
   Animated,
   Easing,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Audio } from "expo-av";
-import * as FileSystem from "expo-file-system";
+import { File as ExpoFile, Paths } from "expo-file-system";
 import { useAuthStore } from "../../../stores/authStore";
+import { useChatStore } from "../../../stores/chatStore";
 import api from "../../../services/api";
 
 type SessionStatus = "connecting" | "listening" | "thinking" | "speaking" | "error" | "ended";
@@ -25,6 +27,7 @@ interface TranscriptEntry {
 }
 
 export default function LiveConversationScreen() {
+  const { fromWakeWord } = useLocalSearchParams<{ fromWakeWord?: string }>();
   const [status, setStatus] = useState<SessionStatus>("connecting");
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -33,6 +36,7 @@ export default function LiveConversationScreen() {
   const wsRef = useRef<WebSocket | null>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
 
   // Auth token for WebSocket
   const token = useAuthStore((s) => s.accessToken);
@@ -143,6 +147,7 @@ export default function LiveConversationScreen() {
   }, [transcript]);
 
   // Connect WebSocket
+  const refreshAccessToken = useAuthStore((s) => s.refreshAccessToken);
   const connectWebSocket = useCallback(async () => {
     if (!token) {
       setStatus("error");
@@ -150,13 +155,25 @@ export default function LiveConversationScreen() {
     }
 
     try {
+      // Refresh token before WebSocket connect (WS doesn't use axios interceptor)
+      let wsToken = token;
+      try {
+        await refreshAccessToken();
+        wsToken = useAuthStore.getState().accessToken || token;
+        console.log("[Voice] Token refreshed for WebSocket");
+      } catch (e) {
+        console.warn("[Voice] Token refresh failed, using current token:", e);
+      }
+
       const baseUrl = api.defaults.baseURL || "http://localhost:8000/api/v1";
-      const wsUrl = baseUrl.replace(/^http/, "ws").replace(/\/api\/v1$/, "") + "/api/v1/voice/live?token=" + token;
+      const wsUrl = baseUrl.replace(/^http/, "ws").replace(/\/api\/v1$/, "") + "/api/v1/voice/live?token=" + wsToken + (fromWakeWord === "true" ? "&wake_word=true" : "");
 
       const ws = new WebSocket(wsUrl);
+      ws.binaryType = "arraybuffer"; // React Native needs this for binary messages
       wsRef.current = ws;
 
       ws.onopen = () => {
+        console.log("[Voice] WebSocket connected, starting recording...");
         setStatus("listening");
         startContinuousRecording();
       };
@@ -165,35 +182,57 @@ export default function LiveConversationScreen() {
         if (typeof event.data === "string") {
           try {
             const msg = JSON.parse(event.data);
-            if (msg.type === "status") {
+            if (msg.type === "session_start" && msg.conversation_id) {
+              conversationIdRef.current = msg.conversation_id;
+              console.log("[Voice] Session started, conversation:", msg.conversation_id);
+            } else if (msg.type === "status") {
               setStatus(msg.status as SessionStatus);
+              // If server says "listening" but we're not recording, restart
+              if (msg.status === "listening" && !isRecordingRef.current && !isRestartingRef.current) {
+                console.log("[Voice] Server says listening but not recording, restarting");
+                restartRecordingAfterPlayback();
+              }
             } else if (msg.type === "transcript") {
               setTranscript(prev => [...prev, {
                 role: msg.role,
                 text: msg.text,
                 timestamp: new Date(),
               }]);
+            } else if (msg.type === "audio_response" && msg.data) {
+              // TTS audio as base64 JSON (fallback)
+              try {
+                await playAudioFromBase64(msg.data);
+              } catch (e) {
+                console.error("Audio playback failed:", e);
+              }
             } else if (msg.type === "error") {
               console.error("Server error:", msg.message);
             }
           } catch (e) {
             console.error("Failed to parse WS message:", e);
           }
-        } else if (event.data instanceof Blob) {
+        } else if (event.data instanceof ArrayBuffer) {
+          // Binary TTS audio from server (ArrayBuffer in React Native)
+          console.log(`[Voice] Received binary audio: ${event.data.byteLength} bytes`);
           try {
-            const arrayBuffer = await event.data.arrayBuffer();
-            await playAudioResponse(arrayBuffer);
+            // Write bytes directly to file (no slow base64 conversion)
+            const bytes = new Uint8Array(event.data);
+            await playAudioFromBytes(bytes);
           } catch (e) {
-            console.error("Audio playback failed:", e);
+            console.error("[Voice] Binary audio playback failed:", e);
           }
+        } else {
+          console.log("[Voice] Unknown message type:", typeof event.data);
         }
       };
 
-      ws.onerror = () => {
+      ws.onerror = (e: any) => {
+        console.error("[Voice] WebSocket error:", e?.message || e);
         setStatus("error");
       };
 
-      ws.onclose = () => {
+      ws.onclose = (e: any) => {
+        console.log("[Voice] WebSocket closed:", e?.code, e?.reason);
         setStatus("ended");
         stopRecording();
       };
@@ -203,11 +242,27 @@ export default function LiveConversationScreen() {
     }
   }, [token]);
 
-  // Start continuous recording and send chunks
+  // Client-side VAD constants (metering-based)
+  const SPEECH_THRESHOLD_DB = -30;  // Above this = speech detected
+  const SILENCE_THRESHOLD_DB = -38; // Below this = silence detected
+  const SILENCE_DURATION_MS = 1200; // 1.2s of silence after speech triggers send
+  const METERING_INTERVAL_MS = 200; // Metering poll interval
+
+  // VAD state refs
+  const speechDetectedRef = useRef(false);
+  const silenceStartRef = useRef<number | null>(null);
+  const isProcessingUtteranceRef = useRef(false);
+
+  // Start continuous recording with metering-based VAD
   const startContinuousRecording = async () => {
     try {
+      console.log("[Voice] Requesting audio permission...");
       const permission = await Audio.requestPermissionsAsync();
-      if (!permission.granted) return;
+      if (!permission.granted) {
+        console.error("[Voice] Audio permission DENIED");
+        return;
+      }
+      console.log("[Voice] Audio permission granted");
 
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
@@ -216,131 +271,219 @@ export default function LiveConversationScreen() {
 
       setIsRecording(true);
       isRecordingRef.current = true;
-      recordChunk();
+      console.log("[Voice] Starting continuous recording with client-side VAD (Platform: " + Platform.OS + ")");
+      startNewRecording();
     } catch (error) {
-      console.error("Failed to start recording:", error);
+      console.error("[Voice] Failed to start recording:", error);
     }
   };
 
-  // Record a chunk and send it, then record next
-  const recordChunk = async () => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-    try {
-      const { recording } = await Audio.Recording.createAsync({
-        android: {
-          extension: ".wav",
-          outputFormat: 2,
-          audioEncoder: 1,
-          sampleRate: 16000,
-          numberOfChannels: 1,
-          bitRate: 256000,
-        },
-        ios: {
-          extension: ".wav",
-          audioQuality: 96,
-          sampleRate: 16000,
-          numberOfChannels: 1,
-          bitRate: 256000,
-          linearPCMBitDepth: 16,
-          linearPCMIsBigEndian: false,
-          linearPCMIsFloat: false,
-          outputFormat: "linearPCM" as any,
-        },
-        web: {},
-      });
-
-      recordingRef.current = recording;
-
-      // Record for ~500ms then stop and send
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      if (recordingRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
-        await recordingRef.current.stopAndUnloadAsync();
-        const uri = recordingRef.current.getURI();
-        recordingRef.current = null;
-
-        if (uri) {
-          const base64Data = await FileSystem.readAsStringAsync(uri, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-
-          // Convert base64 to binary
-          const binaryString = atob(base64Data);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-
-          wsRef.current.send(bytes.buffer);
-
-          // Clean up temp file
-          try { await FileSystem.deleteAsync(uri); } catch {}
-        }
-
-        // Continue recording if still active
-        if (isRecordingRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
-          setTimeout(recordChunk, 50);
-        }
-      }
-    } catch (error) {
-      if (isRecordingRef.current) {
-        setTimeout(recordChunk, 200);
-      }
+  // Start a new recording session with metering for VAD
+  const startNewRecording = async () => {
+    if (!isRecordingRef.current) return;
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.log("[Voice] startNewRecording: WebSocket not open, skipping");
+      return;
     }
-  };
 
-  // Play TTS audio response
-  const playAudioResponse = async (audioData: ArrayBuffer) => {
-    try {
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-      }
-
-      const base64 = btoa(
-        new Uint8Array(audioData).reduce(
-          (data, byte) => data + String.fromCharCode(byte),
-          ""
-        )
-      );
-      const fileUri = FileSystem.cacheDirectory + "alice_live_response.mp3";
-      await FileSystem.writeAsStringAsync(fileUri, base64, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-      });
-
-      const { sound } = await Audio.Sound.createAsync({ uri: fileUri });
-      soundRef.current = sound;
-
-      sound.setOnPlaybackStatusUpdate((playbackStatus) => {
-        if (playbackStatus.isLoaded && playbackStatus.didJustFinish) {
-          setStatus("listening");
-        }
-      });
-
-      await sound.playAsync();
-    } catch (error) {
-      console.error("Audio playback failed:", error);
-    }
-  };
-
-  // Stop recording
-  const stopRecording = async () => {
-    setIsRecording(false);
-    isRecordingRef.current = false;
+    // Clean up any existing recording first (Expo only allows one at a time)
     if (recordingRef.current) {
       try {
         await recordingRef.current.stopAndUnloadAsync();
       } catch {}
       recordingRef.current = null;
     }
+
+    try {
+      speechDetectedRef.current = false;
+      silenceStartRef.current = null;
+      isProcessingUtteranceRef.current = false;
+
+      const { recording } = await Audio.Recording.createAsync(
+        {
+          ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+          isMeteringEnabled: true,
+        },
+        (status) => {
+          if (!status.isRecording || status.metering === undefined) return;
+          if (isProcessingUtteranceRef.current) return;
+
+          const db = status.metering;
+
+          if (db > SPEECH_THRESHOLD_DB) {
+            // Speech detected
+            speechDetectedRef.current = true;
+            silenceStartRef.current = null;
+          } else if (speechDetectedRef.current && db < SILENCE_THRESHOLD_DB) {
+            // Silence after speech
+            if (silenceStartRef.current === null) {
+              silenceStartRef.current = Date.now();
+            } else if (Date.now() - silenceStartRef.current > SILENCE_DURATION_MS) {
+              // Long enough silence → send complete utterance
+              console.log("[Voice] VAD: Silence detected after speech, sending utterance");
+              isProcessingUtteranceRef.current = true;
+              handleUtteranceComplete();
+            }
+          }
+        },
+        METERING_INTERVAL_MS
+      );
+
+      recordingRef.current = recording;
+      console.log("[Voice] Recording started with metering VAD");
+    } catch (error) {
+      console.error("[Voice] Failed to start recording:", error);
+      // Don't retry in a tight loop - wait for next trigger
+    }
   };
 
-  // End session
+  // Handle complete utterance: stop recording, send full audio file to server
+  const handleUtteranceComplete = async () => {
+    const recording = recordingRef.current;
+    if (!recording) {
+      isProcessingUtteranceRef.current = false;
+      return;
+    }
+    recordingRef.current = null;
+
+    try {
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+
+      if (uri && wsRef.current?.readyState === WebSocket.OPEN) {
+        const file = new ExpoFile(uri);
+        const base64Data = await file.base64();
+
+        console.log(`[Voice] Sending complete utterance: ${base64Data.length} base64 chars (m4a)`);
+
+        // Send as audio_complete (server skips VAD, sends directly to Whisper)
+        wsRef.current.send(JSON.stringify({
+          type: "audio_complete",
+          data: base64Data,
+          format: "m4a",
+        }));
+
+        try { file.delete(); } catch {}
+      }
+
+      // Don't restart recording here - playAudioFromBytes will restart
+      // after the server response audio finishes playing.
+      // Starting recording here would immediately be stopped by playAudioFromBytes.
+    } catch (error) {
+      console.error("[Voice] handleUtteranceComplete error:", error);
+      isProcessingUtteranceRef.current = false;
+      if (isRecordingRef.current) {
+        setTimeout(startNewRecording, 500);
+      }
+    }
+  };
+
+  // Guard against double-restart
+  const isRestartingRef = useRef(false);
+
+  const restartRecordingAfterPlayback = async () => {
+    if (isRestartingRef.current) return;
+    isRestartingRef.current = true;
+    try {
+      console.log("[Voice] Restarting recording after playback");
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      setIsRecording(true);
+      isRecordingRef.current = true;
+      await startNewRecording();
+    } catch (e) {
+      console.error("[Voice] restartRecordingAfterPlayback error:", e);
+    } finally {
+      isRestartingRef.current = false;
+    }
+  };
+
+  // Play TTS audio from raw bytes (fast path - no base64 overhead)
+  const playAudioFromBytes = async (audioBytes: Uint8Array) => {
+    try {
+      console.log(`[Voice] Playing audio: ${audioBytes.length} bytes`);
+
+      if (soundRef.current) {
+        try { await soundRef.current.unloadAsync(); } catch {}
+        soundRef.current = null;
+      }
+
+      if (isRecordingRef.current) {
+        await stopRecording();
+      }
+
+      // Write bytes directly to file (skips slow base64 conversion)
+      const responseFile = new ExpoFile(Paths.cache, "alice_live_response.mp3");
+      responseFile.write(audioBytes);
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      });
+
+      const { sound } = await Audio.Sound.createAsync({ uri: responseFile.uri });
+      soundRef.current = sound;
+
+      // Safety timer: if didJustFinish never fires, restart recording anyway
+      const safetyTimer = setTimeout(() => {
+        console.warn("[Voice] Safety timer: playback callback never fired, restarting recording");
+        restartRecordingAfterPlayback();
+      }, 30000); // 30s max audio length
+
+      let didRestart = false;
+      sound.setOnPlaybackStatusUpdate(async (playbackStatus) => {
+        if (!playbackStatus.isLoaded) return;
+        if (playbackStatus.didJustFinish && !didRestart) {
+          didRestart = true;
+          clearTimeout(safetyTimer);
+          console.log("[Voice] Audio playback finished, restarting recording");
+          restartRecordingAfterPlayback();
+        }
+      });
+
+      await sound.playAsync();
+    } catch (error) {
+      console.error("Audio playback failed:", error);
+      restartRecordingAfterPlayback();
+    }
+  };
+
+  // Play TTS audio from base64 string (fallback for JSON audio_response)
+  const playAudioFromBase64 = async (base64Audio: string) => {
+    try {
+      const binaryString = atob(base64Audio);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      await playAudioFromBytes(bytes);
+    } catch (error) {
+      console.error("Audio base64 playback failed:", error);
+    }
+  };
+
+  // Stop recording and fully release the Recording object
+  const stopRecording = async () => {
+    setIsRecording(false);
+    isRecordingRef.current = false;
+    const rec = recordingRef.current;
+    recordingRef.current = null;
+    if (rec) {
+      try {
+        const status = await rec.getStatusAsync();
+        if (status.isRecording) {
+          await rec.stopAndUnloadAsync();
+        }
+      } catch {
+        // Force unload even if status check fails
+        try { await rec.stopAndUnloadAsync(); } catch {}
+      }
+    }
+  };
+
+  // End session and navigate to conversation
   const endSession = async () => {
     await stopRecording();
 
@@ -351,6 +494,13 @@ export default function LiveConversationScreen() {
 
     if (soundRef.current) {
       try { await soundRef.current.unloadAsync(); } catch {}
+    }
+
+    // Select the voice conversation so chat screen shows it
+    const convId = conversationIdRef.current;
+    if (convId) {
+      const store = useChatStore.getState();
+      store.selectConversation(convId);
     }
 
     router.back();

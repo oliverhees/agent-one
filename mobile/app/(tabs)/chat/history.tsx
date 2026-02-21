@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { useChatStore } from "../../../stores/chatStore";
 import { Conversation } from "../../../types/chat";
 
@@ -39,7 +39,14 @@ export default function ChatHistoryScreen() {
   const isDark = colorScheme === "dark";
   const router = useRouter();
 
-  const { conversations, isLoading, selectConversation } = useChatStore();
+  const { conversations, isLoading, selectConversation, loadConversations } = useChatStore();
+
+  // Reload conversations on screen focus
+  useFocusEffect(
+    useCallback(() => {
+      loadConversations();
+    }, [])
+  );
 
   // Sort conversations by updated_at (newest first)
   const sortedConversations = [...conversations].sort((a, b) => {

@@ -131,3 +131,24 @@ class VoiceProviderResponse(BaseModel):
 
     stt_provider: str = Field(..., description="Current STT provider")
     tts_provider: str = Field(..., description="Current TTS provider")
+
+
+class AIProviderUpdate(BaseModel):
+    """Schema for updating AI provider setting."""
+
+    ai_provider: str = Field(..., description="AI provider: 'anthropic' or 'custom'")
+
+    @field_validator("ai_provider")
+    @classmethod
+    def validate_ai_provider(cls, v: str) -> str:
+        if v not in ("anthropic", "custom"):
+            raise ValueError("ai_provider must be 'anthropic' or 'custom'")
+        return v
+
+
+class AIProviderResponse(BaseModel):
+    """Schema for AI provider response."""
+
+    ai_provider: str = Field(..., description="Current AI provider")
+    custom_llm_available: bool = Field(..., description="Custom LLM configured on server?")
+    custom_llm_model: str | None = Field(None, description="Custom LLM model name")
